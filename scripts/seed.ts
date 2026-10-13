@@ -1,6 +1,7 @@
 /**
  * Idempotent master-data seed (DIR-07, DIR-08, PRO-08, VER-01, Section 30).
- * Safe to re-run: every write is an upsert keyed on the natural identifier.
+ * Safe to re-run: every write is a bulk upsert keyed on the natural identifier.
+ * Bulk statements matter: the Vercel build runs far from the database.
  *
  *   npm run db:seed
  */
@@ -23,6 +24,14 @@ import {
 } from "../src/db/seed/master-data";
 import { normaliseAlias, slugify } from "../src/lib/slug";
 
+type AliasRow = typeof schema.geoAliases.$inferInsert;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 async function main() {
   const url = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
   if (!url) throw new Error("No database URL configured");
@@ -30,144 +39,141 @@ async function main() {
   const db = drizzle(pool, { schema });
   const started = Date.now();
   const counts: Record<string, number> = {};
+  const aliasRows: AliasRow[] = [];
+  const pushAlias = (targetType: AliasRow["targetType"], targetId: string, alias: string, kind: AliasRow["kind"]) =>
+    aliasRows.push({ targetType, targetId, alias, aliasNormalised: normaliseAlias(alias), kind });
 
-  // ---- States ----
-  const stateIds = new Map<string, string>();
+  // ---- States (one statement) ----
+  const stateRows = await db
+    .insert(schema.states)
+    .values(STATES.map((s) => ({ code: s.code, name: s.name, slug: slugify(s.name), kind: s.kind, sortOrder: s.kind === "state" ? 0 : 1 })))
+    .onConflictDoUpdate({ target: schema.states.code, set: { name: sql`excluded.name`, kind: sql`excluded.kind` } })
+    .returning({ id: schema.states.id, code: schema.states.code });
+  const stateIds = new Map(stateRows.map((r) => [r.code, r.id]));
   for (const s of STATES) {
-    const [row] = await db
-      .insert(schema.states)
-      .values({ code: s.code, name: s.name, slug: slugify(s.name), kind: s.kind, sortOrder: s.kind === "state" ? 0 : 1 })
-      .onConflictDoUpdate({ target: schema.states.code, set: { name: s.name, kind: s.kind } })
-      .returning({ id: schema.states.id });
-    stateIds.set(s.code, row.id);
-    for (const alias of [s.name, ...(s.aliases ?? [])]) {
-      await upsertAlias(db, "state", row.id, alias, alias === s.name ? "spelling" : "former_name");
-    }
+    const id = stateIds.get(s.code)!;
+    pushAlias("state", id, s.name, "spelling");
+    for (const a of s.aliases ?? []) pushAlias("state", id, a, "former_name");
   }
   counts.states = stateIds.size;
 
-  // ---- Cities ----
+  // ---- Cities (one statement) ----
+  const cityRows = await db
+    .insert(schema.cities)
+    .values(
+      CITIES.map((c) => {
+        const stateId = stateIds.get(c.state);
+        if (!stateId) throw new Error(`unknown state ${c.state} for city ${c.name}`);
+        return { stateId, name: c.name, slug: slugify(c.name), isMetro: c.tier === 1, tier: c.tier, latitude: c.lat, longitude: c.lng };
+      }),
+    )
+    .onConflictDoUpdate({
+      target: [schema.cities.stateId, schema.cities.slug],
+      set: { name: sql`excluded.name`, isMetro: sql`excluded.is_metro`, tier: sql`excluded.tier`, latitude: sql`excluded.latitude`, longitude: sql`excluded.longitude` },
+    })
+    .returning({ id: schema.cities.id, stateId: schema.cities.stateId, slug: schema.cities.slug });
+  const cityIdBySlug = new Map(cityRows.map((r) => [`${r.stateId}/${r.slug}`, r.id]));
   const cityIds = new Map<string, string>();
   for (const c of CITIES) {
-    const stateId = stateIds.get(c.state);
-    if (!stateId) throw new Error(`unknown state ${c.state} for city ${c.name}`);
-    const [row] = await db
-      .insert(schema.cities)
-      .values({
-        stateId,
-        name: c.name,
-        slug: slugify(c.name),
-        isMetro: c.tier === 1,
-        tier: c.tier,
-        latitude: c.lat,
-        longitude: c.lng,
-      })
-      .onConflictDoUpdate({
-        target: [schema.cities.stateId, schema.cities.slug],
-        set: { name: c.name, isMetro: c.tier === 1, tier: c.tier, latitude: c.lat, longitude: c.lng },
-      })
-      .returning({ id: schema.cities.id });
-    cityIds.set(`${c.state}/${c.name}`, row.id);
-    for (const alias of [c.name, ...(c.aliases ?? [])]) {
-      await upsertAlias(db, "city", row.id, alias, alias === c.name ? "spelling" : "former_name");
-    }
+    const id = cityIdBySlug.get(`${stateIds.get(c.state)}/${slugify(c.name)}`)!;
+    cityIds.set(`${c.state}/${c.name}`, id);
+    pushAlias("city", id, c.name, "spelling");
+    for (const a of c.aliases ?? []) pushAlias("city", id, a, "former_name");
   }
   counts.cities = cityIds.size;
 
-  // ---- Localities (metros) ----
+  // ---- Localities (one statement per metro) ----
   let localityCount = 0;
   for (const [cityKey, list] of Object.entries(LOCALITIES)) {
     const cityId = cityIds.get(cityKey);
     if (!cityId) throw new Error(`unknown city key ${cityKey}`);
     const seen = new Set<string>();
+    const parsed: { name: string; slug: string; aliases: string[] }[] = [];
     for (const entry of list) {
       const [name, ...aliases] = entry.split("|").map((s) => s.trim());
       const slug = slugify(name);
       if (seen.has(slug)) continue; // duplicate within the hand-written list
       seen.add(slug);
-      const [row] = await db
-        .insert(schema.localities)
-        .values({ cityId, name, slug })
-        .onConflictDoUpdate({ target: [schema.localities.cityId, schema.localities.slug], set: { name } })
-        .returning({ id: schema.localities.id });
-      localityCount++;
-      for (const alias of [name, ...aliases]) {
-        await upsertAlias(db, "locality", row.id, alias, alias === name ? "spelling" : "colloquial");
-      }
+      parsed.push({ name, slug, aliases });
     }
+    const rows = await db
+      .insert(schema.localities)
+      .values(parsed.map((p) => ({ cityId, name: p.name, slug: p.slug })))
+      .onConflictDoUpdate({ target: [schema.localities.cityId, schema.localities.slug], set: { name: sql`excluded.name` } })
+      .returning({ id: schema.localities.id, slug: schema.localities.slug });
+    const idBySlug = new Map(rows.map((r) => [r.slug, r.id]));
+    for (const p of parsed) {
+      const id = idBySlug.get(p.slug)!;
+      pushAlias("locality", id, p.name, "spelling");
+      for (const a of p.aliases) pushAlias("locality", id, a, "colloquial");
+    }
+    localityCount += parsed.length;
   }
   counts.localities = localityCount;
 
-  // ---- Specialties, languages, services ----
-  for (const [i, s] of SPECIALTIES.entries()) {
-    await db
-      .insert(schema.specialties)
-      .values({ code: s.code, label: s.label, slug: slugify(s.label), description: s.description, requiresEvidence: s.requiresEvidence ?? false, sortOrder: i })
-      .onConflictDoUpdate({ target: schema.specialties.code, set: { label: s.label, description: s.description, requiresEvidence: s.requiresEvidence ?? false, sortOrder: i } });
+  // ---- Aliases (chunked bulk insert) ----
+  for (const part of chunk(aliasRows, 500)) {
+    await db.insert(schema.geoAliases).values(part).onConflictDoNothing();
   }
+  counts.aliases = aliasRows.length;
+
+  // ---- Specialties, languages, services ----
+  await db
+    .insert(schema.specialties)
+    .values(SPECIALTIES.map((s, i) => ({ code: s.code, label: s.label, slug: slugify(s.label), description: s.description, requiresEvidence: s.requiresEvidence ?? false, sortOrder: i })))
+    .onConflictDoUpdate({
+      target: schema.specialties.code,
+      set: { label: sql`excluded.label`, description: sql`excluded.description`, requiresEvidence: sql`excluded.requires_evidence`, sortOrder: sql`excluded.sort_order` },
+    });
   counts.specialties = SPECIALTIES.length;
 
-  for (const [i, l] of LANGUAGES.entries()) {
-    await db
-      .insert(schema.languages)
-      .values({ code: l.code, label: l.label, nativeLabel: l.nativeLabel, sortOrder: i })
-      .onConflictDoUpdate({ target: schema.languages.code, set: { label: l.label, nativeLabel: l.nativeLabel, sortOrder: i } });
-  }
+  await db
+    .insert(schema.languages)
+    .values(LANGUAGES.map((l, i) => ({ code: l.code, label: l.label, nativeLabel: l.nativeLabel, sortOrder: i })))
+    .onConflictDoUpdate({ target: schema.languages.code, set: { label: sql`excluded.label`, nativeLabel: sql`excluded.native_label`, sortOrder: sql`excluded.sort_order` } });
   counts.languages = LANGUAGES.length;
 
-  for (const [i, s] of SERVICES.entries()) {
-    await db
-      .insert(schema.services)
-      .values({ code: s.code, label: s.label, slug: slugify(s.label), kind: s.kind, description: s.description, sortOrder: i })
-      .onConflictDoUpdate({ target: schema.services.code, set: { label: s.label, kind: s.kind, description: s.description, sortOrder: i } });
-  }
+  await db
+    .insert(schema.services)
+    .values(SERVICES.map((s, i) => ({ code: s.code, label: s.label, slug: slugify(s.label), kind: s.kind, description: s.description, sortOrder: i })))
+    .onConflictDoUpdate({ target: schema.services.code, set: { label: sql`excluded.label`, kind: sql`excluded.kind`, description: sql`excluded.description`, sortOrder: sql`excluded.sort_order` } });
   counts.services = SERVICES.length;
 
-  // ---- Credential authorities ----
-  for (const a of CREDENTIAL_AUTHORITIES) {
-    const jurisdictionStateId = a.jurisdictionState ? stateIds.get(a.jurisdictionState) : undefined;
-    const existing = await db.execute(sql`
-      SELECT id FROM credential_authorities
-      WHERE name = ${a.name}
-        AND coalesce(jurisdiction_state_id, '00000000-0000-0000-0000-000000000000'::uuid)
-          = coalesce(${jurisdictionStateId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-    `);
-    if (existing.rows.length === 0) {
-      await db.insert(schema.credentialAuthorities).values({
-        name: a.name,
-        shortName: a.shortName,
-        kind: a.kind,
-        jurisdictionStateId,
-        officialUrl: a.officialUrl,
-        lookupUrl: a.lookupUrl,
-        acceptedForBooking: a.acceptedForBooking,
-        publicLabel: a.publicLabel,
-      });
-    }
-  }
+  // ---- Credential authorities (insert missing only; ops owns edits, VER-03) ----
+  const existingAuthorities = await db
+    .select({ name: schema.credentialAuthorities.name, jurisdictionStateId: schema.credentialAuthorities.jurisdictionStateId })
+    .from(schema.credentialAuthorities);
+  const have = new Set(existingAuthorities.map((a) => `${a.name}|${a.jurisdictionStateId ?? ""}`));
+  const newAuthorities = CREDENTIAL_AUTHORITIES.map((a) => ({
+    name: a.name,
+    shortName: a.shortName,
+    kind: a.kind,
+    jurisdictionStateId: a.jurisdictionState ? stateIds.get(a.jurisdictionState) : undefined,
+    officialUrl: a.officialUrl,
+    lookupUrl: a.lookupUrl,
+    acceptedForBooking: a.acceptedForBooking,
+    publicLabel: a.publicLabel,
+  })).filter((a) => !have.has(`${a.name}|${a.jurisdictionStateId ?? ""}`));
+  if (newAuthorities.length) await db.insert(schema.credentialAuthorities).values(newAuthorities);
   counts.credentialAuthorities = CREDENTIAL_AUTHORITIES.length;
 
   // ---- Platform config, flags, policies, templates ----
-  for (const c of PLATFORM_CONFIG) {
-    await db
-      .insert(schema.platformConfig)
-      .values({ key: c.key, value: c.value, description: c.description, srsRef: c.srsRef })
-      .onConflictDoNothing(); // never overwrite an owner-tuned value
-  }
+  await db
+    .insert(schema.platformConfig)
+    .values(PLATFORM_CONFIG.map((c) => ({ key: c.key, value: c.value, description: c.description, srsRef: c.srsRef })))
+    .onConflictDoNothing(); // never overwrite an owner-tuned value
   counts.platformConfig = PLATFORM_CONFIG.length;
 
-  for (const f of FEATURE_FLAGS) {
-    await db
-      .insert(schema.featureFlags)
-      .values({ key: f.key, enabled: f.enabled, description: f.description, owner: f.owner })
-      .onConflictDoUpdate({ target: schema.featureFlags.key, set: { description: f.description, owner: f.owner } });
-  }
+  await db
+    .insert(schema.featureFlags)
+    .values(FEATURE_FLAGS.map((f) => ({ key: f.key, enabled: f.enabled, description: f.description, owner: f.owner })))
+    .onConflictDoUpdate({ target: schema.featureFlags.key, set: { description: sql`excluded.description`, owner: sql`excluded.owner` } });
   counts.featureFlags = FEATURE_FLAGS.length;
 
-  for (const p of POLICIES) {
-    await db
-      .insert(schema.policies)
-      .values({
+  await db
+    .insert(schema.policies)
+    .values(
+      POLICIES.map((p) => ({
         type: p.type,
         key: p.key,
         version: p.version,
@@ -175,37 +181,22 @@ async function main() {
         stateId: p.stateCode ? stateIds.get(p.stateCode) : undefined,
         content: p.content,
         bodyMarkdown: p.bodyMarkdown,
-      })
-      .onConflictDoNothing();
-  }
+      })),
+    )
+    .onConflictDoNothing();
   counts.policies = POLICIES.length;
 
-  for (const t of NOTIFICATION_TEMPLATES) {
-    await db
-      .insert(schema.notificationTemplates)
-      .values({ eventType: t.eventType, channel: t.channel, language: "en", version: 1, subject: t.subject, body: t.body })
-      .onConflictDoUpdate({
-        target: [schema.notificationTemplates.eventType, schema.notificationTemplates.channel, schema.notificationTemplates.language, schema.notificationTemplates.version],
-        set: { subject: t.subject, body: t.body },
-      });
-  }
+  await db
+    .insert(schema.notificationTemplates)
+    .values(NOTIFICATION_TEMPLATES.map((t) => ({ eventType: t.eventType, channel: t.channel, language: "en", version: 1, subject: t.subject, body: t.body })))
+    .onConflictDoUpdate({
+      target: [schema.notificationTemplates.eventType, schema.notificationTemplates.channel, schema.notificationTemplates.language, schema.notificationTemplates.version],
+      set: { subject: sql`excluded.subject`, body: sql`excluded.body` },
+    });
   counts.notificationTemplates = NOTIFICATION_TEMPLATES.length;
 
   console.log(`[seed] done in ${Date.now() - started} ms`, counts);
   await pool.end();
-}
-
-async function upsertAlias(
-  db: ReturnType<typeof drizzle<typeof schema>>,
-  targetType: "state" | "city" | "locality",
-  targetId: string,
-  alias: string,
-  kind: "spelling" | "former_name" | "abbreviation" | "local_language" | "colloquial",
-) {
-  await db
-    .insert(schema.geoAliases)
-    .values({ targetType, targetId, alias, aliasNormalised: normaliseAlias(alias), kind })
-    .onConflictDoNothing();
 }
 
 main().catch((err) => {
