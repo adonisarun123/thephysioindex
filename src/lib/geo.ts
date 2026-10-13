@@ -22,13 +22,13 @@ export async function listStates(): Promise<StateSummary[]> {
       name: states.name,
       slug: states.slug,
       kind: states.kind,
-      cityCount: sql<number>`(select count(*)::int from cities c where c.state_id = ${states.id} and c.status = 'active')`,
+      cityCount: sql<number>`(select count(*)::int from cities c where c.state_id = "states"."id" and c.status = 'active')`,
       publishedPractitionerCount: sql<number>`(
         select count(distinct pb.practitioner_id)::int
         from practitioner_branches pb
         join branches b on b.id = pb.branch_id
         join practitioners p on p.id = pb.practitioner_id
-        where b.state_id = ${states.id} and pb.state = 'approved' and pb.active_to is null
+        where b.state_id = "states"."id" and pb.state = 'approved' and pb.active_to is null
           and p.listing_status = 'published' and b.status = 'published'
       )`,
     })
@@ -61,13 +61,13 @@ export async function listCities(stateId: string): Promise<CitySummary[]> {
       slug: cities.slug,
       isMetro: cities.isMetro,
       tier: cities.tier,
-      localityCount: sql<number>`(select count(*)::int from localities l where l.city_id = ${cities.id} and l.status = 'active')`,
+      localityCount: sql<number>`(select count(*)::int from localities l where l.city_id = "cities"."id" and l.status = 'active')`,
       publishedPractitionerCount: sql<number>`(
         select count(distinct pb.practitioner_id)::int
         from practitioner_branches pb
         join branches b on b.id = pb.branch_id
         join practitioners p on p.id = pb.practitioner_id
-        where b.city_id = ${cities.id} and pb.state = 'approved' and pb.active_to is null
+        where b.city_id = "cities"."id" and pb.state = 'approved' and pb.active_to is null
           and p.listing_status = 'published' and b.status = 'published'
       )`,
     })
@@ -96,7 +96,7 @@ export async function listLocalities(cityId: string) {
         from practitioner_branches pb
         join branches b on b.id = pb.branch_id
         join practitioners p on p.id = pb.practitioner_id
-        where b.locality_id = ${localities.id} and pb.state = 'approved' and pb.active_to is null
+        where b.locality_id = "localities"."id" and pb.state = 'approved' and pb.active_to is null
           and p.listing_status = 'published' and b.status = 'published'
       )`,
     })
