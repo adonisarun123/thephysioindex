@@ -82,6 +82,12 @@ export function fail(err: unknown, rid: string) {
       { status: 400, headers: { ...PRIVATE_HEADERS, "x-request-id": rid } },
     );
   }
+  if (err instanceof SyntaxError) {
+    return NextResponse.json(
+      { error: { code: "INVALID_INPUT", message: "Request body is not valid JSON" }, requestId: rid },
+      { status: 400, headers: { ...PRIVATE_HEADERS, "x-request-id": rid } },
+    );
+  }
   // Never leak raw exception messages (API-07).
   console.error(`[api] ${rid}`, err);
   const message = isDbUnavailable(err) ? "The booking database is unavailable. Please try again shortly." : "Something went wrong.";

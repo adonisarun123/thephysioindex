@@ -348,6 +348,7 @@ export type PublicProfile = {
     offerings: {
       id: string;
       displayName: string;
+      mode: "clinic" | "home_visit" | "online";
       serviceLabel: string;
       serviceKind: string;
       durationMin: number;
@@ -396,7 +397,7 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
           'directions', b.directions, 'accessibility', b.accessibility, 'facilities', b.facilities,
           'bookable', pb.bookable,
           'offerings', (SELECT coalesce(json_agg(json_build_object(
-              'id', o.id, 'displayName', o.display_name, 'serviceLabel', sv.label, 'serviceKind', sv.kind,
+              'id', o.id, 'displayName', o.display_name, 'mode', o.mode, 'serviceLabel', sv.label, 'serviceKind', sv.kind,
               'durationMin', ov.duration_min, 'basePricePaise', ov.base_price_paise, 'taxPaise', ov.tax_paise,
               'extraChargesPaise', ov.extra_charges_paise, 'priceNote', ov.price_note, 'bookingMode', ov.booking_mode
             ) ORDER BY sv.sort_order, ov.base_price_paise), '[]'::json)
