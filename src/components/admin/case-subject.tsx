@@ -115,7 +115,24 @@ export function CaseSubject({ subjectType, subject }: { subjectType: string; sub
         <Section title="Review">
           <DL items={[["Practitioner", <Link key="p" href={`/admin/practitioners/${s.practitionerId}`} className="underline">{s.practitionerName}</Link>], ["Booking", `${s.bookingReference} · ${s.bookingStatus} · ${fmtDateTime(s.appointmentAt)}`], ["Rating", `${s.rating} / 5`], ["Display name", s.displayName], ["State", <Pill key="s" status={s.state} />], ["Submitted", fmtDateTime(s.createdAt)]]} />
           <blockquote className="mt-3 whitespace-pre-wrap rounded-[var(--r-sm)] bg-surface-2 p-3 text-sm">{s.text ?? <em className="text-muted">No text</em>}</blockquote>
+          {s.appeal ? (
+            <div className="mt-3 rounded-[var(--r-sm)] border border-line p-3 text-sm">
+              <p className="font-semibold">Appeal from the author</p>
+              <p className="mt-1 text-xs text-muted">Earlier rejection reason: {s.moderationReason ?? "—"}</p>
+              <p className="mt-2 whitespace-pre-wrap">{s.appeal}</p>
+            </div>
+          ) : null}
           <p className="mt-2 text-xs text-muted">Negative feedback is not removed for being negative; reject only for abuse, spam or personal information (REV-03).</p>
+        </Section>
+      );
+    case "review_reply":
+      return (
+        <Section title="Provider reply">
+          <DL items={[["Practitioner", <Link key="p" href={`/admin/practitioners/${s.practitionerId}`} className="underline">{s.practitionerName}</Link>], ["Reply version", String(s.version)], ["State", <Pill key="s" status={s.state} />], ["Submitted", fmtDateTime(s.createdAt)]]} />
+          <p className="mt-3 text-xs text-muted">Replying to {s.reviewerDisplayName} · {s.rating} / 5</p>
+          <blockquote className="mt-1 whitespace-pre-wrap rounded-[var(--r-sm)] bg-surface-2 p-3 text-sm text-ink-2">{s.reviewText ?? <em className="text-muted">No text</em>}</blockquote>
+          <blockquote className="mt-3 whitespace-pre-wrap rounded-[var(--r-sm)] border border-line p-3 text-sm">{s.replyText}</blockquote>
+          <p className="mt-2 text-xs text-muted">Reject a reply that discloses anything about the patient or their treatment, or that is abusive (REV-03).</p>
         </Section>
       );
     case "locality_proposal":

@@ -309,9 +309,11 @@ async function decideOffer(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput):
 }
 
 async function decideReview(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput): Promise<string> {
+  if (c.subject_type === "review_reply") return decideReply(tx, v, c, input);
   const res = await tx.execute<{ id: string; practitioner_id: string; state: string }>(sql`SELECT id, practitioner_id, state FROM reviews WHERE id = ${c.subject_id} FOR UPDATE`);
   const r = res.rows[0];
   if (!r) throw new ApiError("NOT_FOUND", "Review not found");
+  if (r.state === "withdrawn") throw new ApiError("CONFLICT", "The author withdrew this review; dismiss the case instead");
   let to: string;
   if (input.decision === "approved") to = "published";
   else if (input.decision === "rejected") to = "rejected";
@@ -320,6 +322,20 @@ async function decideReview(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput)
   await recalcReviews(tx, r.practitioner_id);
   await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: `review.${to}`, objectType: "review", objectId: r.id, reason: input.reason, changedFields: { state: { from: r.state, to } }, correlationId: c.id }, tx);
   return to === "published" ? "Review published; averages recalculated" : "Review rejected; the submitter sees the reason";
+}
+
+/** REV-03: provider replies are moderated too; the profile shows the latest approved version. */
+async function decideReply(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput): Promise<string> {
+  const res = await tx.execute<{ id: string; state: string }>(sql`SELECT id, state::text AS state FROM review_replies WHERE id = ${c.subject_id} FOR UPDATE`);
+  const rr = res.rows[0];
+  if (!rr) throw new ApiError("NOT_FOUND", "Reply not found");
+  let to: "approved" | "rejected";
+  if (input.decision === "approved") to = "approved";
+  else if (input.decision === "rejected") to = "rejected";
+  else throw new ApiError("INVALID_INPUT", "Choose publish (approve) or reject");
+  await tx.execute(sql`UPDATE review_replies SET state = ${to}::moderation_state, moderation_reason = ${input.reason} WHERE id = ${rr.id}`);
+  await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: `review_reply.${to}`, objectType: "review_reply", objectId: rr.id, reason: input.reason, changedFields: { state: { from: rr.state, to } }, correlationId: c.id }, tx);
+  return to === "approved" ? "Reply published on the profile" : "Reply rejected; the practitioner sees the reason";
 }
 
 async function decideComplaint(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput): Promise<string> {

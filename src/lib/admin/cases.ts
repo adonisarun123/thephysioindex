@@ -58,6 +58,7 @@ const SUMMARY_SQL = sql`CASE vc.subject_type
   WHEN 'duplicate_candidate' THEN (SELECT pa.display_name || ' ⇄ ' || pb.display_name FROM duplicate_candidates dc JOIN practitioners pa ON pa.id = dc.practitioner_a_id JOIN practitioners pb ON pb.id = dc.practitioner_b_id WHERE dc.id = vc.subject_id)
   WHEN 'offer_version' THEN (SELECT o.title || ' v' || ov.version FROM offer_versions ov JOIN offers o ON o.id = ov.offer_id WHERE ov.id = vc.subject_id)
   WHEN 'review' THEN (SELECT r.rating || '★ · ' || left(coalesce(r.text, ''), 60) FROM reviews r WHERE r.id = vc.subject_id)
+  WHEN 'review_reply' THEN (SELECT 'Reply v' || rr.version || ' · ' || left(rr.text, 60) FROM review_replies rr WHERE rr.id = vc.subject_id)
   WHEN 'locality_proposal' THEN (SELECT lp.proposed_name || ' (' || c.name || ')' FROM locality_proposals lp JOIN cities c ON c.id = lp.city_id WHERE lp.id = vc.subject_id)
   WHEN 'booking' THEN (SELECT 'Booking ' || b.reference FROM bookings b WHERE b.id = vc.subject_id)
   WHEN 'user' THEN (SELECT coalesce(u.display_name, u.email, u.mobile) FROM users u WHERE u.id = vc.subject_id)
@@ -202,8 +203,16 @@ export async function loadSubject(subjectType: string, subjectId: string): Promi
     case "review": {
       const res = await d.execute(sql`
         SELECT r.id, r.rating, r.text, r.display_name AS "displayName", r.state, r.moderation_reason AS "moderationReason", r.created_at AS "createdAt",
+          (SELECT vc.evidence ->> 'appeal' FROM verification_cases vc WHERE vc.subject_type = 'review' AND vc.subject_id = r.id AND vc.evidence ? 'appeal' ORDER BY vc.submitted_at DESC LIMIT 1) AS appeal,
           b.reference AS "bookingReference", b.status AS "bookingStatus", b.starts_at AS "appointmentAt", p.display_name AS "practitionerName", p.id AS "practitionerId"
         FROM reviews r JOIN bookings b ON b.id = r.booking_id JOIN practitioners p ON p.id = r.practitioner_id WHERE r.id = ${subjectId}`);
+      return (res.rows[0] as Record<string, unknown>) ?? null;
+    }
+    case "review_reply": {
+      const res = await d.execute(sql`
+        SELECT rr.id, rr.version, rr.text AS "replyText", rr.state, rr.moderation_reason AS "moderationReason", rr.created_at AS "createdAt",
+          r.rating, r.text AS "reviewText", r.display_name AS "reviewerDisplayName", p.display_name AS "practitionerName", p.id AS "practitionerId"
+        FROM review_replies rr JOIN reviews r ON r.id = rr.review_id JOIN practitioners p ON p.id = rr.practitioner_id WHERE rr.id = ${subjectId}`);
       return (res.rows[0] as Record<string, unknown>) ?? null;
     }
     case "locality_proposal": {

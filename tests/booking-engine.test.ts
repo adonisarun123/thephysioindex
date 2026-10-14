@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
-import { closeFixtures, istDate, istInstant, key, makePatientUser, makePractitioner, q, TEST_DB, configureTestDatabase, type Fixture } from "./helpers/booking-fixture";
+import { closeFixtures, istDate, istInstant, key, makePatientUser, makePractitioner, q, soonSlot, TEST_DB, configureTestDatabase, type Fixture } from "./helpers/booking-fixture";
 
 /**
  * Booking engine integration tests against a real PostgreSQL database
@@ -152,9 +152,7 @@ describe.skipIf(!TEST_DB)("booking engine on PostgreSQL", () => {
 
     it("after the cutoff, a cancellation becomes a request to the clinic", async () => {
       const u = await makePatientUser();
-      const soon = new Date(Date.now() + 3 * 3600_000);
-      soon.setUTCMinutes(Math.ceil(soon.getUTCMinutes() / 15) * 15, 0, 0); // grid is 15 minutes from 00:00 IST (offset is a multiple of 15)
-      const b = await holdAndConfirm(fx, u, soon.toISOString());
+      const b = await holdAndConfirm(fx, u, soonSlot(3));
       const c = await engine.cancelByPatient({ userId: u.userId }, { bookingId: b.bookingId, expectedVersion: 1, idempotencyKey: key() });
       expect(c.requested).toBe(true);
       expect(c.status).toBe("confirmed");

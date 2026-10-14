@@ -12,6 +12,7 @@ export function WorkspaceShell({ practitionerName, status, current, children }: 
     { href: "/workspace/calendar", label: "Calendar" },
     { href: "/workspace/appointments", label: "Appointments" },
     { href: "/workspace/offers", label: "Offers" },
+    { href: "/workspace/reviews", label: "Reviews" },
     { href: "/workspace/team", label: "Team" },
     { href: "/workspace/reports", label: "Reports" },
     { href: "/workspace/settings", label: "Settings" },
