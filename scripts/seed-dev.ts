@@ -8,7 +8,7 @@
  */
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: [".env.local", ".env"] });
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "../src/db/schema";
@@ -180,8 +180,8 @@ async function main() {
     SELECT 1
   `);
   await db.execute(sql`DELETE FROM practitioners WHERE is_test_account`);
-  await db.execute(sql`DELETE FROM branches WHERE clinic_id IN (SELECT id FROM clinics WHERE name LIKE 'TEST %')`);
-  await db.execute(sql`DELETE FROM clinics WHERE name LIKE 'TEST %'`);
+  // TEST clinics and branches are upserted by name, never deleted: real onboarding
+  // flows on the preview may reference them (offerings, associations, bookings).
 
   // Lookups
   const stateRows = await db.select({ id: schema.states.id, code: schema.states.code }).from(schema.states);
@@ -203,6 +203,12 @@ async function main() {
   // Clinics and branches
   const clinicIdByName = new Map<string, string>();
   for (const c of CLINICS) {
+    const existing = await db.select({ id: schema.clinics.id }).from(schema.clinics).where(eq(schema.clinics.name, c.name)).limit(1);
+    if (existing[0]) {
+      await db.update(schema.clinics).set({ about: c.about, publicPhone: c.phone, status: "published" }).where(eq(schema.clinics.id, existing[0].id));
+      clinicIdByName.set(c.name, existing[0].id);
+      continue;
+    }
     const [row] = await db
       .insert(schema.clinics)
       .values({ publicId: newPublicId(), slug: slugify(c.name), name: c.name, about: c.about, publicPhone: c.phone, status: "published" })
@@ -210,7 +216,18 @@ async function main() {
     clinicIdByName.set(c.name, row.id);
   }
   const branchIdByName = new Map<string, string>();
+  const existingBranches = await db
+    .select({ id: schema.branches.id, clinicId: schema.branches.clinicId, name: schema.branches.name })
+    .from(schema.branches)
+    .where(inArray(schema.branches.clinicId, [...clinicIdByName.values()]));
+  const branchByKey = new Map(existingBranches.map((b) => [`${b.clinicId}/${b.name}`, b.id]));
   for (const b of BRANCHES) {
+    const known = branchByKey.get(`${clinicIdByName.get(b.clinic)}/${b.name}`);
+    if (known) {
+      await db.update(schema.branches).set({ status: "published" }).where(eq(schema.branches.id, known));
+      branchIdByName.set(b.name, known);
+      continue;
+    }
     const [stateCode, citySlugRaw] = b.city.split("/");
     const stateId = stateByCode.get(stateCode)!;
     const cityId = cityByKey.get(`${stateId}/${slugify(citySlugRaw)}`);
