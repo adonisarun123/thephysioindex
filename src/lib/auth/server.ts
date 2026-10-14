@@ -22,11 +22,22 @@ import { normaliseIndianMobile, sms } from "@/lib/messaging/sms";
  *   a database hook and references the auth user by auth_subject.
  */
 const OTP_TTL_SECONDS = Number(process.env.OTP_TTL_SECONDS ?? 300);
+
+/** Public origin of this deployment: explicit env, else Vercel's branch/deployment host, else local dev. */
+function resolveBaseUrl(): string {
+  if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+  if (process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_BRANCH_URL) return `https://${process.env.VERCEL_BRANCH_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+}
 const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS ?? 5);
 
 export const auth = betterAuth({
   appName: "The Physio Index",
-  baseURL: process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  baseURL: resolveBaseUrl(),
+  // Preview deployments are served from several *.vercel.app hosts (deployment and branch aliases).
+  trustedOrigins: process.env.VERCEL_ENV === "preview" ? ["https://*.vercel.app"] : [],
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(db(), { provider: "pg", schema: authSchema }),
   emailAndPassword: { enabled: false },
