@@ -1,5 +1,8 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAuthMiddleware } from "better-auth/api";
+import { deleteSessionCookie } from "better-auth/cookies";
+import { generateRandomString } from "better-auth/crypto";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP, phoneNumber, twoFactor } from "better-auth/plugins";
 import { sql } from "drizzle-orm";
@@ -100,6 +103,32 @@ export const auth = betterAuth({
         },
       },
     },
+  },
+  hooks: {
+    /**
+     * The two-factor plugin only challenges credential sign-ins
+     * (/sign-in/email, /sign-in/username, /sign-in/phone-number). Staff sign in
+     * with an email OTP, so without this hook an email inbox alone would open
+     * the admin area. Replicate the plugin's challenge for /sign-in/email-otp:
+     * discard the fresh session, store a pending-2FA record and set the signed
+     * two_factor cookie that /two-factor/verify-totp consumes (IAM-05, SEC-02).
+     */
+    after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/sign-in/email-otp") return;
+      const data = ctx.context.newSession;
+      if (!data?.user || !(data.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled) return;
+      deleteSessionCookie(ctx, true);
+      await ctx.context.internalAdapter.deleteSession(data.session.token);
+      ctx.context.setNewSession(null);
+      const maxAge = 600;
+      const twoFactorCookie = ctx.context.createAuthCookie("two_factor", { maxAge });
+      const identifier = `2fa-${generateRandomString(20)}`;
+      const expiresAt = new Date(Date.now() + maxAge * 1000);
+      await ctx.context.internalAdapter.createVerificationValue({ value: data.user.id, identifier, expiresAt });
+      await ctx.context.internalAdapter.createVerificationValue({ value: "0", identifier: `2fa-attempts-${identifier}`, expiresAt });
+      await ctx.setSignedCookie(twoFactorCookie.name, identifier, ctx.context.secret, twoFactorCookie.attributes);
+      return ctx.json({ twoFactorRedirect: true, twoFactorMethods: ["totp"] });
+    }),
   },
   plugins: [
     phoneNumber({
