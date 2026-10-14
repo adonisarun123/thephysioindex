@@ -47,7 +47,7 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
-    cookieCache: { enabled: true, maxAge: 60 * 5 },
+    cookieCache: { enabled: true, maxAge: 60 }, // short: role/kind changes (onboarding, staff grants) must show within a minute
   },
   advanced: {
     database: { generateId: "uuid" },

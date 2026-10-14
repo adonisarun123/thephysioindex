@@ -143,7 +143,13 @@ export async function loadSubject(subjectType: string, subjectId: string): Promi
         SELECT pv.id, pv.version, pv.state, pv.structured_content AS "structuredContent", pv.changed_fields AS "changedFields", pv.submitted_at AS "submittedAt", pv.practitioner_id AS "practitionerId",
           p.display_name AS "displayName", p.listing_status AS "listingStatus", p.published_version_id AS "publishedVersionId",
           (SELECT structured_content FROM profile_versions WHERE id = p.published_version_id) AS "publishedContent",
-          (SELECT json_agg(json_build_object('id', c.id, 'type', c.type, 'authority', a.name, 'number', c.number_original, 'status', c.status, 'expiresOn', c.expires_on) ORDER BY c.created_at) FROM credentials c JOIN credential_authorities a ON a.id = c.authority_id WHERE c.practitioner_id = pv.practitioner_id) AS credentials
+          (SELECT json_agg(json_build_object('id', c.id, 'type', c.type, 'authority', a.name, 'number', c.number_original, 'status', c.status, 'expiresOn', c.expires_on) ORDER BY c.created_at) FROM credentials c JOIN credential_authorities a ON a.id = c.authority_id WHERE c.practitioner_id = pv.practitioner_id) AS credentials,
+          (SELECT json_agg(json_build_object('id', pb.id, 'state', pb.state, 'label', cl.name || ' · ' || b.name, 'place', concat_ws(', ', l.name, ci.name, st.name), 'branchStatus', b.status) ORDER BY pb.created_at)
+             FROM practitioner_branches pb JOIN branches b ON b.id = pb.branch_id JOIN clinics cl ON cl.id = b.clinic_id
+             LEFT JOIN localities l ON l.id = b.locality_id LEFT JOIN cities ci ON ci.id = b.city_id LEFT JOIN states st ON st.id = b.state_id
+             WHERE pb.practitioner_id = pv.practitioner_id AND pb.state IN ('pending','approved') AND pb.active_to IS NULL) AS branches,
+          (SELECT json_object_agg(s.id, s.label) FROM specialties s) AS "specialtyLabels",
+          (SELECT json_object_agg(lg.id, lg.label) FROM languages lg) AS "languageLabels"
         FROM profile_versions pv JOIN practitioners p ON p.id = pv.practitioner_id WHERE pv.id = ${subjectId}`);
       return (res.rows[0] as Record<string, unknown>) ?? null;
     }

@@ -31,12 +31,16 @@ export async function createPractitioner(ownerUserId: string, identity: NonNulla
     await tx.execute(sql`
       INSERT INTO profile_versions (practitioner_id, version, state, structured_content, changed_fields, created_by_user_id)
       VALUES (${id}, 1, 'draft', ${JSON.stringify({ identity })}::jsonb, ARRAY['identity'], ${ownerUserId})`);
+    // The account becomes a practitioner account: default landing is the workspace and the
+    // placeholder name from phone sign-up ("Patient") is replaced where it would show to reviewers.
+    await tx.execute(sql`UPDATE users SET display_name = ${identity.displayName} WHERE id = ${ownerUserId} AND (display_name IS NULL OR display_name = 'Patient')`);
+    await tx.execute(sql`UPDATE auth."user" SET kind = 'practitioner', name = CASE WHEN name IS NULL OR name = 'Patient' THEN ${identity.displayName} ELSE name END, updated_at = now()
+      WHERE id = (SELECT auth_subject::uuid FROM users WHERE id = ${ownerUserId}) AND coalesce(kind, 'patient') = 'patient'`);
     // Owner role scoped to the new practitioner; the viewer's kind becomes practitioner for the default landing.
     await tx.execute(sql`
       INSERT INTO role_assignments (user_id, role, scope_type, scope_id, permissions, reason)
       VALUES (${ownerUserId}, 'practitioner', 'practitioner', ${id}, '["*"]'::jsonb, 'self_created')
       ON CONFLICT DO NOTHING`);
-    await tx.execute(sql`UPDATE auth."user" SET kind = 'practitioner' WHERE id = (SELECT auth_subject::uuid FROM users WHERE id = ${ownerUserId}) AND coalesce(kind, 'patient') <> 'staff'`);
     await audit({ actorUserId: ownerUserId, action: "practitioner.create", objectType: "practitioner", objectId: id, changedFields: { publicId } }, tx);
     return id;
   });

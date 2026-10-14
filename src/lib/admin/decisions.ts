@@ -143,6 +143,16 @@ async function decideProfile(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput
   switch (input.decision) {
     case "approved": {
       const pv = await publishVersion(tx, v, versionId, c.id, input.reason);
+      if (isListing) {
+        // The clinics shown in the case are part of what the reviewer approved: a first
+        // publication with every association still pending would list nowhere (LOC-02).
+        const assoc = await tx.execute(sql`UPDATE practitioner_branches SET state = 'approved', approved_by_user_id = ${v.userId}
+          WHERE practitioner_id = ${pv.practitioner_id} AND state = 'pending' AND active_to IS NULL RETURNING id`);
+        if (assoc.rowCount) {
+          await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "practitioner.branch.approve", objectType: "practitioner", objectId: pv.practitioner_id, reason: input.reason, changedFields: { associations: assoc.rows.map((r) => (r as { id: string }).id), via: "listing_review" }, correlationId: c.id }, tx);
+          return `Version ${pv.version} approved and published; ${assoc.rowCount} clinic association(s) approved`;
+        }
+      }
       return `Version ${pv.version} approved and published`;
     }
     case "rejected":

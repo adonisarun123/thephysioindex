@@ -145,6 +145,7 @@ function ProfileVersion({ s }: { s: Record<string, any> }) { // eslint-disable-l
   const draft = (s.structuredContent ?? {}) as StructuredContent;
   const published = (s.publishedContent ?? null) as StructuredContent | null;
   const diff = diffContent(published, draft);
+  const labels: Labels = { specialties: (s.specialtyLabels ?? {}) as Record<string, string>, languages: (s.languageLabels ?? {}) as Record<string, string> };
   return (
     <Section title={`Profile version ${s.version}`}>
       <DL items={[["Practitioner", <Link key="p" href={`/admin/practitioners/${s.practitionerId}`} className="underline">{s.displayName}</Link>], ["Version state", <Pill key="s" status={s.state} />], ["Listing", <Pill key="l" status={s.listingStatus} />], ["Submitted", fmtDateTime(s.submittedAt)], ["Published version", s.publishedVersionId ? "exists (stays visible until approval, VER-05)" : "none"]]} />
@@ -153,13 +154,73 @@ function ProfileVersion({ s }: { s: Record<string, any> }) { // eslint-disable-l
       <div className="mt-1 grid gap-2">
         {diff.map((d) => (
           <div key={d.field} className="rounded-[var(--r-sm)] border border-line p-2 text-sm">
-            <p className="font-semibold">{d.field}</p>
-            {published ? <div className="grid gap-2 md:grid-cols-2"><div><p className="text-xs text-muted">Published</p><Val v={d.before} /></div><div><p className="text-xs text-muted">Draft</p><Val v={d.after} /></div></div> : <Val v={d.after} />}
+            <p className="font-semibold">{FIELD_LABELS[d.field] ?? d.field}</p>
+            {published ? <div className="grid gap-2 md:grid-cols-2"><div><p className="text-xs text-muted">Published</p><Field field={d.field} v={d.before} labels={labels} /></div><div><p className="text-xs text-muted">Draft</p><Field field={d.field} v={d.after} labels={labels} /></div></div> : <Field field={d.field} v={d.after} labels={labels} />}
           </div>
         ))}
       </div>
       <Credentials list={s.credentials} />
+      <Branches list={s.branches} />
     </Section>
+  );
+}
+
+const FIELD_LABELS: Record<string, string> = { displayName: "Display name", designation: "Designation", headline: "Headline", about: "About", gender: "Gender", practiceStartDate: "Practising since", qualifications: "Qualifications", experiences: "Experience", specialties: "Areas of practice", languages: "Languages", portfolio: "Portfolio" };
+
+type Labels = { specialties: Record<string, string>; languages: Record<string, string> };
+
+/** Human rendering of the structured fields a reviewer compares; unknown shapes fall back to JSON. */
+function Field({ field, v, labels }: { field: string; v: unknown; labels: Labels }) {
+  if (v == null || v === "") return <p className="text-muted">—</p>;
+  if (field === "qualifications" && Array.isArray(v)) {
+    return (
+      <ul className="list-disc pl-5">
+        {(v as { degree?: string; institution?: string; completionYear?: number; inProgress?: boolean }[]).map((q, i) => (
+          <li key={i}>{q.degree ?? "—"}{q.institution ? ` — ${q.institution}` : ""}{q.completionYear ? ` (${q.completionYear}${q.inProgress ? ", in progress" : ""})` : q.inProgress ? " (in progress)" : ""}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (field === "specialties" && Array.isArray(v)) {
+    const items = (v as (string | { id?: string; code?: string; isPrimary?: boolean })[]).map((x) => {
+      const key = typeof x === "string" ? x : (x.id ?? x.code ?? "");
+      const primary = typeof x === "object" && x.isPrimary;
+      return `${labels.specialties[key] ?? key}${primary ? " (primary)" : ""}`;
+    });
+    return <p>{items.join(", ")}</p>;
+  }
+  if (field === "languages" && Array.isArray(v)) {
+    const items = (v as (string | { id?: string; code?: string })[]).map((x) => { const key = typeof x === "string" ? x : (x.id ?? x.code ?? ""); return labels.languages[key] ?? key; });
+    return <p>{items.join(", ")}</p>;
+  }
+  if (field === "experiences" && Array.isArray(v)) {
+    return (
+      <ul className="list-disc pl-5">
+        {(v as { role?: string; organisation?: string; from?: string; to?: string | null }[]).map((e, i) => (
+          <li key={i}>{[e.role, e.organisation].filter(Boolean).join(" at ")}{e.from ? ` · ${e.from} – ${e.to ?? "present"}` : ""}</li>
+        ))}
+      </ul>
+    );
+  }
+  return <Val v={v} />;
+}
+
+function Branches({ list }: { list: unknown }) {
+  const rows = Array.isArray(list) ? (list as { id: string; state: string; label: string; place: string | null; branchStatus: string }[]) : [];
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-semibold">Clinics</h3>
+      {rows.length === 0 ? <p className="text-sm text-muted">No clinic association. The listing will not appear on any location page until one is approved (LOC-02).</p> : null}
+      <ul className="mt-1 divide-y divide-line text-sm">
+        {rows.map((b) => (
+          <li key={b.id} className="flex flex-wrap items-center gap-2 py-1">
+            <span>{b.label}</span>{b.place ? <span className="text-muted">· {b.place}</span> : null}
+            <Pill status={b.state} />{b.branchStatus !== "published" ? <Pill status={b.branchStatus} /> : null}
+          </li>
+        ))}
+      </ul>
+      {rows.some((b) => b.state === "pending") ? <p className="mt-1 text-xs text-muted">Approving a new listing also approves its pending clinic associations.</p> : null}
+    </div>
   );
 }
 
