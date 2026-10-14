@@ -18,9 +18,28 @@ export default function Page() {
         <li className="card p-4"><strong>No listing fee or commission at launch.</strong> Patients pay at your clinic.</li>
       </ul>
       <div className="mt-8 card bg-brand-soft p-6">
-        <p className="font-medium">Onboarding opens with the next release.</p>
-        <p className="mt-1 text-sm text-muted">Registration, claims and the practitioner workspace are being built now. <Link href="/" className="underline">Back to home</Link>.</p>
+        <p className="font-medium">Ready to start?</p>
+        <p className="mt-1 text-sm text-muted">Sign in with your mobile number, check whether a listing already exists for you, then claim it or create a new profile. Drafts save as you go.</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          {/* /claim requires a practitioner sign-in; anonymous visitors are redirected to /sign-in?as=practitioner&next=/claim (PRO-02). */}
+          <Link href="/claim" className="btn btn-primary">Create or claim your profile</Link>
+          <Link href="/workspace" className="btn btn-quiet">Open my workspace</Link>
+        </div>
       </div>
+      <section className="mt-10 grid gap-4 text-sm sm:grid-cols-3">
+        <div>
+          <p className="font-semibold">1. Search first</p>
+          <p className="mt-1 text-muted">Imported listings exist for many practitioners. Claim yours to take control of what patients see.</p>
+        </div>
+        <div>
+          <p className="font-semibold">2. Complete your profile</p>
+          <p className="mt-1 text-muted">Identity, credentials, clinics, services and fees. Submit for review when ready.</p>
+        </div>
+        <div>
+          <p className="font-semibold">3. Publish availability</p>
+          <p className="mt-1 text-muted">Weekly hours per clinic, leave and blocks. Booking opens once your profile and eligibility are approved.</p>
+        </div>
+      </section>
     </div>
   );
 }

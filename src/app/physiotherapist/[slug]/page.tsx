@@ -264,7 +264,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             ) : !p.claimed ? (
               <p className="text-sm" id="claim">
                 This profile has not been claimed, so no appointment slots are published. Are you {p.displayName}?{" "}
-                <Link href="/for-physiotherapists" className="underline">Claim this profile</Link>.
+                <Link href={`/claim/${p.publicId}`} className="underline">Claim this profile</Link>.
               </p>
             ) : (
               <p className="text-sm">Online booking is not yet enabled for this profile.</p>
@@ -332,18 +332,22 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                 <button type="button" disabled className="btn btn-primary w-full">
                   Book an appointment
                 </button>
-              ) : primaryBranch?.publicPhone ? (
-                <a href={`tel:${primaryBranch.publicPhone}`} className="btn btn-secondary w-full">
-                  Call clinic
-                </a>
               ) : (
-                <Link href="#clinics" className="btn btn-quiet w-full">
-                  See clinic details
-                </Link>
+                <>
+                  {/* Enquiry for unbookable profiles: not a booking, reserves nothing (Section 2) */}
+                  <Link href={`${p.path}/enquire`} className="btn btn-secondary w-full">
+                    Enquire
+                  </Link>
+                  {primaryBranch?.publicPhone ? (
+                    <a href={`tel:${primaryBranch.publicPhone}`} className="btn btn-quiet mt-2 w-full">
+                      Call clinic
+                    </a>
+                  ) : null}
+                </>
               )}
             </div>
             <p className="mt-3 text-xs text-muted">
-              {p.bookable ? "Instant confirmation. Cancel free up to 12 hours before." : "Online booking is not available for this profile."}
+              {p.bookable ? "Instant confirmation. Cancel free up to 12 hours before." : "Online booking is not available for this profile. An enquiry is not a booking."}
             </p>
           </div>
           <nav aria-label="On this page" className="mt-4 hidden text-sm lg:block">
