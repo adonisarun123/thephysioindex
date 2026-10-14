@@ -3,6 +3,7 @@ import { withTransaction, type Db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { hasRole, type Viewer } from "@/lib/auth/session";
+import { kickDispatch } from "@/lib/messaging/kick";
 import { slugify, normaliseAlias } from "@/lib/slug";
 import { textArray } from "@/lib/sql";
 import {
@@ -67,6 +68,25 @@ export function canDecide(v: Viewer, caseType: string, decision: Decision): bool
   return false;
 }
 
+/** Case types whose outcome the submitting practitioner is told about (Section 13, verification decision). */
+const APPLICANT_NOTICE: Record<string, string> = {
+  listing_review: "your new listing",
+  profile_change: "your profile change",
+  claim: "your profile claim",
+  credential_check: "your registration check",
+  offer_review: "your offer",
+};
+
+async function notifyApplicant(tx: Db, c: CaseRow, input: DecisionInput) {
+  const subjectLabel = APPLICANT_NOTICE[c.case_type];
+  if (!subjectLabel || !["approved", "rejected", "changes_requested"].includes(input.decision)) return;
+  const owner = c.practitioner_id ? (await tx.execute<{ owner_user_id: string | null }>(sql`SELECT owner_user_id FROM practitioners WHERE id = ${c.practitioner_id}`)).rows[0]?.owner_user_id : null;
+  const recipientUserId = c.submitted_by_user_id ?? owner ?? null;
+  if (!recipientUserId) return;
+  await emitOutbox(tx, "verification_case", c.id, "verification.decided", { caseId: c.id, caseType: c.case_type, decision: input.decision, reason: input.reason, subjectLabel, recipientUserId }, c.id);
+  kickDispatch();
+}
+
 export async function decideCase(v: Viewer, input: DecisionInput): Promise<string> {
   return withTransaction(async (_client, tx) => {
     const res = await tx.execute<CaseRow>(sql`SELECT id, case_type, subject_type, subject_id, practitioner_id, state, submitted_by_user_id, evidence, first_response_at FROM verification_cases WHERE id = ${input.caseId} FOR UPDATE`);
@@ -125,6 +145,7 @@ export async function decideCase(v: Viewer, input: DecisionInput): Promise<strin
       WHERE id = ${c.id}`);
     await tx.execute(sql`INSERT INTO case_events (case_id, actor_user_id, event_type, payload) VALUES (${c.id}, ${v.userId}, 'decision', ${JSON.stringify({ decision: input.decision, reason: input.reason, evidenceRef: input.evidenceRef ?? null, message })}::jsonb)`);
     await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: `case.${input.decision}`, objectType: "verification_case", objectId: c.id, reason: input.reason, changedFields: { caseType: c.case_type, subjectType: c.subject_type, subjectId: c.subject_id, evidenceRef: input.evidenceRef ?? null }, correlationId: c.id }, tx);
+    await notifyApplicant(tx, c, input);
     return message || `Decision recorded: ${input.decision.replace("_", " ")}`;
   });
 }

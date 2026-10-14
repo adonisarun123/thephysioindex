@@ -7,7 +7,7 @@
   "buildCommand": "npm run build:vercel",
   "crons": [
     {
-      "path": "/api/cron/expire-holds",
+      "path": "/api/cron/notifications",
       "schedule": "30 21 * * *"
     }
   ]

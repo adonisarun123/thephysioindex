@@ -1,3 +1,5 @@
+import { isPermanentStatus, SendError } from "./core";
+
 /**
  * SMS provider adapter (API-01): timeouts, no secrets in logs. The `console`
  * provider is for development and previews. MSG91 requires a DLT-approved
@@ -6,6 +8,13 @@
 export interface SmsProvider {
   sendOtp(phoneE164: string, code: string): Promise<{ providerRef?: string }>;
   sendText(phoneE164: string, text: string, templateId?: string): Promise<{ providerRef?: string }>;
+  /**
+   * Transactional notification (MSG-01). Indian carriers deliver only
+   * DLT-registered templates, so MSG91 needs `providerTemplateId`; the named
+   * variables are passed to the MSG91 flow template as-is. `text` is the
+   * rendered message, used by the console provider and for logs.
+   */
+  sendNotification(phoneE164: string, msg: { text: string; providerTemplateId?: string | null; vars: Record<string, string> }): Promise<{ providerRef?: string }>;
 }
 
 class ConsoleSms implements SmsProvider {
@@ -15,6 +24,10 @@ class ConsoleSms implements SmsProvider {
   }
   async sendText(phone: string, text: string) {
     console.log(`[sms:console] to ${mask(phone)}: ${text}`);
+    return {};
+  }
+  async sendNotification(phone: string, msg: { text: string }) {
+    console.log(`[sms:console] to ${mask(phone)}: ${msg.text}`);
     return {};
   }
 }
@@ -41,9 +54,21 @@ class Msg91Sms implements SmsProvider {
       headers: { "Content-Type": "application/json", authkey: this.authKey },
       body: JSON.stringify({ template_id: templateId, sender: this.sender, recipients: [{ mobiles: phone.replace(/^\+/, ""), text }] }),
     });
-    if (!res.ok) throw new Error(`msg91 flow failed: ${res.status}`);
+    if (!res.ok) throw new SendError(`msg91 flow failed: ${res.status}`, isPermanentStatus(res.status), res.status);
     const data = (await res.json().catch(() => ({}))) as { request_id?: string };
     return { providerRef: data.request_id };
+  }
+  async sendNotification(phone: string, msg: { text: string; providerTemplateId?: string | null; vars: Record<string, string> }) {
+    if (!msg.providerTemplateId) throw new SendError("no DLT template id set for this SMS template (admin → Policies and templates)", true);
+    const res = await fetchWithTimeout("https://control.msg91.com/api/v5/flow/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authkey: this.authKey },
+      body: JSON.stringify({ template_id: msg.providerTemplateId, short_url: "0", recipients: [{ mobiles: phone.replace(/^\+/, ""), ...msg.vars }] }),
+    });
+    if (!res.ok) throw new SendError(`msg91 flow failed: ${res.status}`, isPermanentStatus(res.status), res.status);
+    const data = (await res.json().catch(() => ({}))) as { type?: string; message?: string; request_id?: string };
+    if (data.type === "error") throw new SendError(`msg91 rejected: ${String(data.message ?? "unknown").slice(0, 200)}`, true);
+    return { providerRef: data.request_id ?? data.message };
   }
 }
 
