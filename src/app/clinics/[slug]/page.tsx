@@ -69,7 +69,7 @@ async function ClinicPage({ params }: { params: PageProps<"/clinics/[slug]">["pa
 
       <div className="mt-8 grid gap-6">
         {c.branches.map((b) => (
-          <section key={b.id} className="rounded-lg border border-line bg-surface p-5">
+          <section key={b.id} className="card p-5">
             <h2 className="text-xl font-semibold">{b.name}</h2>
             <p className="mt-1 text-sm text-muted">
               {[b.addressLine1, b.addressLine2].filter(Boolean).join(", ")},{" "}

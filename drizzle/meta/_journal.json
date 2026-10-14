@@ -15,6 +15,20 @@
       "when": 1791912257917,
       "tag": "0001_constraints_and_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791940408400,
+      "tag": "0002_auth_and_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791940429650,
+      "tag": "0003_auth_grants_and_triggers",
+      "breakpoints": true
     }
   ]
 }

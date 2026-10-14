@@ -21,7 +21,7 @@ export default function Page() {
       <p className="mt-2 text-muted">A label describes the check we performed. It is not a judgement of treatment quality and does not guarantee outcomes.</p>
       <dl className="mt-4 grid gap-3">
         {LABELS.map(([label, text]) => (
-          <div key={label} className="rounded-md border border-line bg-surface p-4">
+          <div key={label} className="card p-4">
             <dt className="font-medium">{label}</dt>
             <dd className="mt-1 text-sm text-muted">{text}</dd>
           </div>

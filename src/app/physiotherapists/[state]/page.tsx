@@ -49,7 +49,7 @@ async function StatePage({ params }: { params: PageProps<"/physiotherapists/[sta
         <ul className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {cities.map((c) => (
             <li key={c.id}>
-              <Link href={`/physiotherapists/${state.slug}/${c.slug}`} className="block rounded-md border border-line bg-surface px-3 py-2 hover:border-brand">
+              <Link href={`/physiotherapists/${state.slug}/${c.slug}`} className="block card block px-4 py-3 hover:border-brand">
                 <span className="font-medium">{c.name}</span>
                 <span className="block text-xs text-muted">
                   {c.publishedPractitionerCount > 0 ? `${c.publishedPractitionerCount} physiotherapists` : c.localityCount > 0 ? `${c.localityCount} localities` : "Onboarding"}

@@ -5,3 +5,5 @@ export * from "./practitioners";
 export * from "./clinics";
 export * from "./scheduling";
 export * from "./operations";
+export * from "./auth";
+export * from "./content";

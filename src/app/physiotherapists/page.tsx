@@ -50,14 +50,14 @@ async function PlaceResults({ q }: { q: string }) {
   if (matches.length === 1) redirect(matches[0].path);
   if (matches.length === 0) {
     return (
-      <div className="mt-6 rounded-md border border-line bg-surface p-4">
+      <div className="mt-6 card p-4">
         <p className="font-medium">No place matched “{q}”.</p>
         <p className="mt-1 text-sm text-muted">Try a city name such as Bengaluru or Pune, or pick a state below. Practitioner-name search arrives with the directory release.</p>
       </div>
     );
   }
   return (
-    <div className="mt-6 rounded-md border border-line bg-surface p-4">
+    <div className="mt-6 card p-4">
       <p className="font-medium">Did you mean…</p>
       <ul className="mt-2 grid gap-1 sm:grid-cols-2">
         {matches.map((m) => (
@@ -86,7 +86,7 @@ async function StateList() {
           <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {g.items.map((s) => (
               <li key={s.id}>
-                <Link href={`/physiotherapists/${s.slug}`} className="block rounded-md border border-line bg-surface px-3 py-2 hover:border-brand">
+                <Link href={`/physiotherapists/${s.slug}`} className="block card block px-4 py-3 hover:border-brand">
                   <span className="font-medium">{s.name}</span>
                   <span className="block text-xs text-muted">{s.cityCount} {s.cityCount === 1 ? "city" : "cities"}</span>
                 </Link>

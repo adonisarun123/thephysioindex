@@ -64,15 +64,15 @@ export function PractitionerCardRow({ card }: { card: Card }) {
           )}
         </div>
         {card.bookable ? (
-          <Link href={`${card.path}#book`} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-ink">
+          <Link href={`${card.path}#book`} className="btn btn-primary py-2">
             See availability
           </Link>
         ) : card.claimed ? (
-          <Link href={card.path} className="rounded-md border border-line px-3 py-2 text-sm font-medium hover:border-brand">
+          <Link href={card.path} className="btn btn-quiet py-2">
             View profile
           </Link>
         ) : (
-          <Link href={`${card.path}#claim`} className="rounded-md border border-line px-3 py-2 text-sm font-medium hover:border-brand">
+          <Link href={`${card.path}#claim`} className="btn btn-quiet py-2">
             Unclaimed profile
           </Link>
         )}

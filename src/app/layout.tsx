@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { Suspense } from "react";
+import { Logo } from "@/components/logo";
 import "./globals.css";
 
 
@@ -19,12 +19,22 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en-IN" className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}>
+    <html lang="en-IN" className="h-full antialiased">
       <body className="flex min-h-full flex-col">
         <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2">
           Skip to content
         </a>
-        <SiteHeader />
+        <Suspense
+          fallback={
+            <header className="bg-background">
+              <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+                <Logo />
+              </div>
+            </header>
+          }
+        >
+          <SiteHeader />
+        </Suspense>
         <main id="main" className="flex-1">
           {children}
         </main>

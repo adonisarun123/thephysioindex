@@ -64,7 +64,7 @@ export async function DirectoryResults({
 
   return (
     <section className="mt-8 grid gap-8 lg:grid-cols-[16rem_1fr]">
-      <form method="get" action={basePath} className="self-start rounded-lg border border-line bg-surface p-4 text-sm lg:sticky lg:top-4" aria-label="Filter results">
+      <form method="get" action={basePath} className="self-start card p-4 text-sm lg:sticky lg:top-4" aria-label="Filter results">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Filters{active ? ` (${active})` : ""}</h2>
           {active ? (
@@ -73,11 +73,11 @@ export async function DirectoryResults({
         </div>
         <label className="mt-3 block">
           <span className="text-muted">Name or clinic</span>
-          <input name="q" defaultValue={filters.q ?? ""} className="mt-1 w-full rounded border border-line px-2 py-1.5" />
+          <input name="q" defaultValue={filters.q ?? ""} className="mt-1 input py-1.5" />
         </label>
         <label className="mt-3 block">
           <span className="text-muted">Area of practice</span>
-          <select name="specialty" defaultValue={filters.specialtySlug ?? ""} className="mt-1 w-full rounded border border-line bg-surface px-2 py-1.5">
+          <select name="specialty" defaultValue={filters.specialtySlug ?? ""} className="mt-1 input py-1.5">
             <option value="">Any</option>
             {specs.map((s) => (
               <option key={s.slug} value={s.slug}>{s.label}</option>
@@ -86,7 +86,7 @@ export async function DirectoryResults({
         </label>
         <label className="mt-3 block">
           <span className="text-muted">Language</span>
-          <select name="language" defaultValue={filters.languageCode ?? ""} className="mt-1 w-full rounded border border-line bg-surface px-2 py-1.5">
+          <select name="language" defaultValue={filters.languageCode ?? ""} className="mt-1 input py-1.5">
             <option value="">Any</option>
             {langs.map((l) => (
               <option key={l.code} value={l.code}>{l.label}</option>
@@ -95,7 +95,7 @@ export async function DirectoryResults({
         </label>
         <label className="mt-3 block">
           <span className="text-muted">Verification</span>
-          <select name="verification" defaultValue={filters.verification ?? ""} className="mt-1 w-full rounded border border-line bg-surface px-2 py-1.5">
+          <select name="verification" defaultValue={filters.verification ?? ""} className="mt-1 input py-1.5">
             <option value="">Any</option>
             <option value="registration_checked">Registration checked</option>
             <option value="document_reviewed">Registration checked or document reviewed</option>
@@ -105,13 +105,13 @@ export async function DirectoryResults({
         <fieldset className="mt-3">
           <legend className="text-muted">Fee (₹)</legend>
           <div className="mt-1 flex gap-2">
-            <input name="fee_min" type="number" min={0} step={50} placeholder="Min" defaultValue={filters.feeMinPaise != null ? filters.feeMinPaise / 100 : ""} className="w-1/2 rounded border border-line px-2 py-1.5" aria-label="Minimum fee" />
-            <input name="fee_max" type="number" min={0} step={50} placeholder="Max" defaultValue={filters.feeMaxPaise != null ? filters.feeMaxPaise / 100 : ""} className="w-1/2 rounded border border-line px-2 py-1.5" aria-label="Maximum fee" />
+            <input name="fee_min" type="number" min={0} step={50} placeholder="Min" defaultValue={filters.feeMinPaise != null ? filters.feeMinPaise / 100 : ""} className="input w-1/2 py-1.5" aria-label="Minimum fee" />
+            <input name="fee_max" type="number" min={0} step={50} placeholder="Max" defaultValue={filters.feeMaxPaise != null ? filters.feeMaxPaise / 100 : ""} className="input w-1/2 py-1.5" aria-label="Maximum fee" />
           </div>
         </fieldset>
         <label className="mt-3 block">
           <span className="text-muted">Practitioner gender (optional)</span>
-          <select name="gender" defaultValue={filters.gender ?? ""} className="mt-1 w-full rounded border border-line bg-surface px-2 py-1.5">
+          <select name="gender" defaultValue={filters.gender ?? ""} className="mt-1 input py-1.5">
             <option value="">No preference</option>
             <option value="female">Female</option>
             <option value="male">Male</option>
@@ -124,13 +124,13 @@ export async function DirectoryResults({
         </label>
         <label className="mt-3 block">
           <span className="text-muted">Sort</span>
-          <select name="sort" defaultValue={filters.sort ?? ""} className="mt-1 w-full rounded border border-line bg-surface px-2 py-1.5">
+          <select name="sort" defaultValue={filters.sort ?? ""} className="mt-1 input py-1.5">
             <option value="">Best match</option>
             <option value="fee_asc">Fee, low to high</option>
             <option value="fee_desc">Fee, high to low</option>
           </select>
         </label>
-        <button type="submit" className="mt-4 w-full rounded-md bg-brand px-3 py-2 font-medium text-white hover:bg-brand-ink">
+        <button type="submit" className="mt-4 btn btn-primary w-full">
           Apply filters
         </button>
       </form>
@@ -142,7 +142,7 @@ export async function DirectoryResults({
         </p>
         {result.items.length === 0 ? (
           active ? (
-            <div className="mt-4 rounded-lg border border-dashed border-line bg-surface p-6">
+            <div className="mt-4 card border-dashed p-6">
               <p className="font-medium">No results with these filters.</p>
               <p className="mt-1 text-sm text-muted">
                 <Link href={basePath} className="underline">Clear filters</Link> or try <Link href={broaderHref} className="underline">{broaderLabel}</Link>.
@@ -160,7 +160,7 @@ export async function DirectoryResults({
         )}
         {nextHref ? (
           <p className="mt-6">
-            <Link href={nextHref} rel="next" className="rounded-md border border-line px-4 py-2 text-sm font-medium hover:border-brand">
+            <Link href={nextHref} rel="next" className="btn btn-quiet py-2">
               Next page
             </Link>
           </p>

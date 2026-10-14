@@ -201,7 +201,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             ) : (
               <div className="grid gap-6">
                 {p.branches.map((b) => (
-                  <article key={b.id} className="rounded-lg border border-line bg-surface p-4">
+                  <article key={b.id} className="card p-4">
                     <h3 className="font-semibold">
                       <Link href={b.clinicPath} className="hover:underline">{b.clinicName}</Link>
                       {b.name && b.name !== b.clinicName ? <span className="text-muted"> — {b.name}</span> : null}
@@ -318,7 +318,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
         </main>
 
         <aside className="order-first lg:order-none lg:sticky lg:top-4 lg:self-start">
-          <div id="book" className="rounded-lg border border-line bg-surface p-4">
+          <div id="book" className="card p-4">
             {minFee != null ? (
               <>
                 <p className="text-2xl font-semibold">{formatPaise(minFee)}</p>
@@ -329,15 +329,15 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             )}
             <div className="mt-4">
               {p.bookable ? (
-                <button type="button" disabled className="w-full cursor-not-allowed rounded-md bg-brand px-4 py-2 font-medium text-white opacity-70">
+                <button type="button" disabled className="btn btn-primary w-full">
                   Book an appointment
                 </button>
               ) : primaryBranch?.publicPhone ? (
-                <a href={`tel:${primaryBranch.publicPhone}`} className="block w-full rounded-md border border-brand px-4 py-2 text-center font-medium text-brand-ink hover:bg-brand-soft">
+                <a href={`tel:${primaryBranch.publicPhone}`} className="btn btn-secondary w-full">
                   Call clinic
                 </a>
               ) : (
-                <Link href="#clinics" className="block w-full rounded-md border border-line px-4 py-2 text-center font-medium hover:border-brand">
+                <Link href="#clinics" className="btn btn-quiet w-full">
                   See clinic details
                 </Link>
               )}
@@ -377,7 +377,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             <p className="font-semibold">{minFee != null ? formatPaise(minFee) : "Fees on enquiry"}</p>
             <p className="text-xs text-muted">{p.bookable ? "Instant confirmation" : "Online booking unavailable"}</p>
           </div>
-          <a href="#book" className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white">
+          <a href="#book" className="btn btn-primary py-2">
             {p.bookable ? "Book" : "Contact"}
           </a>
         </div>
