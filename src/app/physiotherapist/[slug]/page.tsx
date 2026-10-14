@@ -236,6 +236,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                             <tr key={o.id} className="border-t border-line">
                               <td className="py-2">
                                 <span className="font-medium">{o.displayName}</span>
+                                {o.mode !== "clinic" ? <span className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs">{o.mode === "home_visit" ? "Home visit" : "Online"}</span> : null}
                                 {o.priceNote ? <span className="block text-muted">{o.priceNote}</span> : null}
                               </td>
                               <td className="py-2">{o.durationMin} min</td>
@@ -258,7 +259,9 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
 
           <Section id="availability" title="Availability">
             {p.bookable ? (
-              <p className="text-sm">Online booking opens with the appointment release. Until then, contact the clinic directly.</p>
+              <p className="text-sm">
+                Choose a service and see open times for the next two weeks. <Link href={`${p.path}/book`} className="underline">See available times</Link>.
+              </p>
             ) : p.bookingPaused ? (
               <p className="text-sm">Online booking is currently unavailable for this practitioner. Contact the clinic directly.</p>
             ) : !p.claimed ? (
@@ -329,9 +332,9 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             )}
             <div className="mt-4">
               {p.bookable ? (
-                <button type="button" disabled className="btn btn-primary w-full">
+                <Link href={`${p.path}/book`} className="btn btn-primary w-full">
                   Book an appointment
-                </button>
+                </Link>
               ) : (
                 <>
                   {/* Enquiry for unbookable profiles: not a booking, reserves nothing (Section 2) */}
@@ -381,9 +384,9 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             <p className="font-semibold">{minFee != null ? formatPaise(minFee) : "Fees on enquiry"}</p>
             <p className="text-xs text-muted">{p.bookable ? "Instant confirmation" : "Online booking unavailable"}</p>
           </div>
-          <a href="#book" className="btn btn-primary py-2">
+          <Link href={p.bookable ? `${p.path}/book` : `${p.path}/enquire`} className="btn btn-primary py-2">
             {p.bookable ? "Book" : "Contact"}
-          </a>
+          </Link>
         </div>
       </div>
     </div>

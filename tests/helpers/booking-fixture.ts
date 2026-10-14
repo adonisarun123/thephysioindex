@@ -9,7 +9,7 @@ import { Pool } from "pg";
 
 export const TEST_DB = process.env.TEST_DATABASE_URL;
 
-export function useTestDatabase() {
+export function configureTestDatabase() {
   if (!TEST_DB) return;
   if (/neon\.tech/.test(TEST_DB) && !/dev|test/i.test(TEST_DB)) throw new Error("refusing to run booking integration tests against a non-test Neon endpoint");
   process.env.DATABASE_URL = TEST_DB;

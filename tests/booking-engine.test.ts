@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
-import { closeFixtures, istDate, istInstant, key, makePatientUser, makePractitioner, q, TEST_DB, useTestDatabase, type Fixture } from "./helpers/booking-fixture";
+import { closeFixtures, istDate, istInstant, key, makePatientUser, makePractitioner, q, TEST_DB, configureTestDatabase, type Fixture } from "./helpers/booking-fixture";
 
 /**
  * Booking engine integration tests against a real PostgreSQL database
@@ -8,7 +8,7 @@ import { closeFixtures, istDate, istInstant, key, makePatientUser, makePractitio
  * Run with TEST_DATABASE_URL set; skipped otherwise.
  */
 
-useTestDatabase();
+configureTestDatabase();
 const engine = await import("@/lib/booking/engine");
 
 const code = (e: unknown) => (e instanceof ApiError ? e.code : `UNEXPECTED: ${(e as Error)?.message}`);

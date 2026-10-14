@@ -1,7 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "regions": ["sin1"],
+  "regions": [
+    "sin1"
+  ],
   "buildCommand": "npm run build:vercel",
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/cron/expire-holds",
+      "schedule": "30 21 * * *"
+    }
+  ]
 }

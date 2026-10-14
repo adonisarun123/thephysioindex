@@ -167,7 +167,7 @@ async function main() {
   // real preview activity now references (bookings, cases, claims, calendars, reviews…) is
   // kept as is and not re-seeded, so exercising those flows never breaks the next build.
   const keepSql = sql`SELECT id FROM practitioners p WHERE is_test_account AND NOT EXISTS (SELECT 1 FROM bookings x WHERE x.practitioner_id = p.id)
-    AND NOT EXISTS (SELECT 1 FROM reservations x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM calendar_resources x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM reservations x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM availability_rules x JOIN calendar_resources cr ON cr.id = x.resource_id WHERE cr.practitioner_id = p.id AND x.created_by_user_id IS NOT NULL)
     AND NOT EXISTS (SELECT 1 FROM claim_requests x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM verification_cases x WHERE x.practitioner_id = p.id)
     AND NOT EXISTS (SELECT 1 FROM reviews x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM review_replies x WHERE x.practitioner_id = p.id)
     AND NOT EXISTS (SELECT 1 FROM enquiries x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM offers x WHERE x.practitioner_id = p.id)
@@ -190,6 +190,10 @@ async function main() {
     , d10 AS (UPDATE practitioners SET published_version_id = NULL WHERE id IN (SELECT id FROM tp))
     SELECT 1
   `);
+  // Seeded calendars (rules without an author) are rebuilt; a calendar someone edited on the preview keeps its practitioner.
+  await db.execute(sql`DELETE FROM availability_rules WHERE resource_id IN (SELECT id FROM calendar_resources WHERE practitioner_id IN (${keepSql}))`);
+  await db.execute(sql`DELETE FROM schedule_exceptions WHERE resource_id IN (SELECT id FROM calendar_resources WHERE practitioner_id IN (${keepSql}))`);
+  await db.execute(sql`DELETE FROM calendar_resources WHERE practitioner_id IN (${keepSql})`);
   await db.execute(sql`DELETE FROM practitioners WHERE id IN (${keepSql})`);
   const retained = await db.execute<{ display_name: string }>(sql`SELECT display_name FROM practitioners WHERE is_test_account`);
   const retainedNames = new Set(retained.rows.map((r) => r.display_name));
@@ -322,6 +326,19 @@ async function main() {
         scopeOfCheck: c.status === "registration_checked" ? "Name and number matched on the issuer's public register" : undefined,
         source: "seed-dev",
       });
+    }
+    // Calendar (BKG-07): every practitioner has one. Bookable ones get weekly hours, alternating days across branches.
+    const [cal] = await db.insert(schema.calendarResources).values({ practitionerId: pr.id }).returning({ id: schema.calendarResources.id });
+    if (p.bookable) {
+      const rules = p.branches.flatMap((bName, i) =>
+        [1, 2, 3, 4, 5, 6]
+          .filter((d) => d % p.branches.length === i)
+          .flatMap((weekday) => [
+            { resourceId: cal.id, branchId: branchIdByName.get(bName)!, weekday, localStart: "09:00", localEnd: "13:00", scheduleVersion: 1 },
+            ...(weekday === 6 ? [] : [{ resourceId: cal.id, branchId: branchIdByName.get(bName)!, weekday, localStart: "15:00", localEnd: "19:00", scheduleVersion: 1 }]),
+          ]),
+      );
+      if (rules.length) await db.insert(schema.availabilityRules).values(rules);
     }
     for (const bName of p.branches) {
       const branchId = branchIdByName.get(bName)!;

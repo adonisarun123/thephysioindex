@@ -175,9 +175,10 @@ export async function listBookings(practitionerId: string, f: { status?: string;
   }));
 }
 
-export async function getBooking(practitionerId: string, id: string): Promise<(BookingRow & { timezone: string; appointmentReason: string | null; patientMobile: string | null; notes: { note: string; createdAt: string }[] }) | null> {
+export async function getBooking(practitionerId: string, id: string): Promise<(BookingRow & { version: number; timezone: string; appointmentReason: string | null; patientMobile: string | null; cancellationReason: string | null; cancellationRequested: boolean; notes: { note: string; createdAt: string }[] }) | null> {
   const res = await db().execute<Record<string, unknown>>(sql`
-    SELECT bk.id, bk.reference, bk.status::text AS status, bk.source::text AS source, bk.starts_at, bk.ends_at, bk.timezone, bk.appointment_reason, b.name AS branch_name, o.display_name AS offering_name,
+    SELECT bk.id, bk.reference, bk.version, bk.cancellation_reason,
+      EXISTS (SELECT 1 FROM resolution_tasks t WHERE t.booking_id = bk.id AND t.kind = 'cancellation_request_after_cutoff' AND t.state IN ('open', 'in_progress')) AS cancellation_requested, bk.status::text AS status, bk.source::text AS source, bk.starts_at, bk.ends_at, bk.timezone, bk.appointment_reason, b.name AS branch_name, o.display_name AS offering_name,
       pt.display_name AS patient_name, pt.mobile AS patient_mobile, bk.payment_reported::text AS payment_reported,
       (SELECT coalesce(json_agg(json_build_object('note', n.note, 'createdAt', n.created_at) ORDER BY n.created_at), '[]'::json) FROM booking_notes n WHERE n.booking_id = bk.id) AS notes
     FROM bookings bk JOIN branches b ON b.id = bk.branch_id JOIN offerings o ON o.id = bk.offering_id JOIN patients pt ON pt.id = bk.patient_id
@@ -191,6 +192,9 @@ export async function getBooking(practitionerId: string, id: string): Promise<(B
     source: r.source as string,
     startsAt: new Date(r.starts_at as string).toISOString(),
     endsAt: new Date(r.ends_at as string).toISOString(),
+    version: Number(r.version),
+    cancellationReason: (r.cancellation_reason as string | null) ?? null,
+    cancellationRequested: Boolean(r.cancellation_requested),
     timezone: r.timezone as string,
     appointmentReason: (r.appointment_reason as string | null) ?? null,
     branchName: r.branch_name as string,

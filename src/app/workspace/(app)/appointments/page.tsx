@@ -20,7 +20,7 @@ export default function Page({ searchParams }: PageProps<"/workspace/appointment
   );
 }
 
-/** Section 15: scoped list with filters; detail view per booking. Manual entry waits for the booking engine (PRO-13). */
+/** Section 15: scoped list with filters; detail view per booking; manual entry uses the same conflict rules (PRO-13). */
 async function Appointments({ searchParams }: { searchParams: PageProps<"/workspace/appointments">["searchParams"] }) {
   await connection();
   const sp = await searchParams;
@@ -36,10 +36,7 @@ async function Appointments({ searchParams }: { searchParams: PageProps<"/worksp
         title="Appointments"
         lede="Every booking for your profile across clinics. Numbers match the underlying scoped records (Section 15)."
         action={
-          <span className="inline-flex flex-col items-end gap-1">
-            <button type="button" className="btn btn-quiet py-2 text-sm" disabled aria-disabled="true">Add walk-in</button>
-            <span className="text-xs text-muted">Manual entry arrives with the booking engine; it will use the same conflict rules (PRO-13).</span>
-          </span>
+          <Link href="/workspace/appointments/new" className="btn btn-secondary py-2 text-sm">Add walk-in or phone booking</Link>
         }
       />
       <Section title="Filters">

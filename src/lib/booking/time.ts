@@ -50,3 +50,12 @@ export function daysBetween(from: string, to: string): number {
 export function formatLocal(ms: number | Date | string, opts: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }): string {
   return new Date(ms).toLocaleString("en-IN", { ...opts, timeZone: BOOKING_TZ });
 }
+
+/** Server clock for request-time rendering. Pages render once per request, so this is stable within a render. */
+export function nowMs(): number {
+  return Date.now();
+}
+
+export function todayLocal(): string {
+  return localDateOf(nowMs());
+}

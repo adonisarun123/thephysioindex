@@ -14,13 +14,14 @@ export type BookablePatient = { id: string; displayName: string; relationship: "
 
 export async function listBookablePatients(userId: string, d: Db = db()): Promise<BookablePatient[]> {
   const res = await d.execute<{ id: string; display_name: string; relationship: string; age_band: string | null }>(sql`
+    SELECT * FROM (
     SELECT p.id, p.display_name, 'self' AS relationship, p.age_band::text AS age_band
     FROM patients p WHERE p.account_user_id = ${userId} AND p.status = 'active'
     UNION ALL
     SELECT p.id, p.display_name, g.relationship, p.age_band::text AS age_band
     FROM guardian_links g JOIN patients p ON p.id = g.patient_id
     WHERE g.guardian_user_id = ${userId} AND g.revoked_at IS NULL AND g.verification_state <> 'revoked' AND p.status = 'active'
-    ORDER BY relationship = 'self' DESC, display_name`);
+    ) x ORDER BY (relationship = 'self') DESC, display_name`);
   return res.rows.map((r) => ({ id: r.id, displayName: r.display_name, relationship: r.relationship, ageBand: r.age_band }));
 }
 
