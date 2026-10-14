@@ -116,6 +116,35 @@ export const enquiries = pgTable(
   (t) => [index("enquiries_status_idx").on(t.status, t.createdAt), index("enquiries_practitioner_idx").on(t.practitionerId)],
 );
 
+/**
+ * Practitioner sign-up leads from the paid-acquisition landing page
+ * (/for-physiotherapists/join). A lead is not a listing and publishes
+ * nothing: operations calls the practitioner and walks them through
+ * onboarding, where credentials are verified as usual (VER-03, DIR-14).
+ */
+export const practitionerSignups = pgTable(
+  "practitioner_signups",
+  {
+    id: id(),
+    reference: text("reference").notNull(),
+    fullName: text("full_name").notNull(),
+    mobile: text("mobile").notNull(),
+    email: text("email"),
+    city: text("city").notNull(),
+    practiceType: text("practice_type").notNull(), // clinic_owner | independent | home_visits | employed | student
+    registrationNumber: text("registration_number"),
+    attribution: jsonb("attribution").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+    status: text("status").notNull().default("new"), // new | contacted | onboarding | onboarded | not_eligible | closed
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("practitioner_signups_reference_uq").on(t.reference),
+    index("practitioner_signups_status_idx").on(t.status, t.createdAt),
+    index("practitioner_signups_mobile_idx").on(t.mobile, t.createdAt),
+  ],
+);
+
 /** Platform-wide daily snapshot for the admin overview (ANA-01, ANA-03). */
 export const dailyStats = pgTable(
   "daily_stats",

@@ -33,6 +33,7 @@ export function adminNav(c: QueueCounts): NavGroup[] {
       label: "Directory",
       items: [
         { href: "/admin/practitioners", label: "Practitioners" },
+        { href: "/admin/signups", label: "Sign-up leads", count: c.signups },
         { href: "/admin/clinics", label: "Clinics" },
         { href: "/admin/patients", label: "Patients" },
         { href: "/admin/imports", label: "Imports" },
