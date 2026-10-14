@@ -121,3 +121,17 @@ export async function closeFixtures() {
   await globalThis.__tpiPool?.end();
   globalThis.__tpiPool = undefined;
 }
+
+/**
+ * A slot start roughly `hoursAhead` from now on the 15-minute grid, moved to
+ * 00:15 IST next day if the 30-minute service plus buffer would cross IST
+ * midnight (the fixture calendar is per-day 00:00–24:00). Keeps "soon" tests
+ * independent of the time of day they run.
+ */
+export function soonSlot(hoursAhead = 3): string {
+  const soon = new Date(Date.now() + hoursAhead * 3600_000);
+  soon.setUTCMinutes(Math.ceil(soon.getUTCMinutes() / 15) * 15, 0, 0);
+  const istMinutes = (soon.getUTCHours() * 60 + soon.getUTCMinutes() + 330) % 1440;
+  if (istMinutes + 45 > 1440) soon.setTime(soon.getTime() + (1440 - istMinutes + 15) * 60_000);
+  return soon.toISOString();
+}

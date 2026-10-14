@@ -366,6 +366,12 @@ export const NOTIFICATION_TEMPLATES: {
   },
   {
     eventType: "review.invitation",
+    channel: "email",
+    subject: "How was your appointment {{reference}}?",
+    body: "Thank you for visiting {{practitionerName}} at {{clinicName}}.\n\nIf you have two minutes, a short review helps other patients choose. Reviews are moderated and show only the name you choose.\n\nWrite a review: {{reviewUrl}}",
+  },
+  {
+    eventType: "review.invitation",
     channel: "sms",
     body: "How was your appointment {{reference}}? Share a review (2 min): {{reviewUrl}} - The Physio Index",
   },

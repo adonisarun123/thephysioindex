@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { closeFixtures, configureTestDatabase, istDate, istInstant, key, makePatientUser, makePractitioner, q, TEST_DB, type Fixture } from "./helpers/booking-fixture";
+import { closeFixtures, configureTestDatabase, istDate, istInstant, key, makePatientUser, makePractitioner, q, soonSlot, TEST_DB, type Fixture } from "./helpers/booking-fixture";
 
 /**
  * Notification delivery against PostgreSQL (MSG-01, MSG-02). Providers are the
@@ -83,9 +83,7 @@ describe.skipIf(!TEST_DB)("notification dispatch on PostgreSQL", () => {
   it("an appointment 3 hours away gets only the 2-hour reminder", async () => {
     const u = await makePatientUser();
     await verifiedUser(u.userId);
-    const soon = new Date(Date.now() + 3 * 3_600_000);
-    soon.setUTCMinutes(Math.ceil(soon.getUTCMinutes() / 15) * 15, 0, 0);
-    const b = await book(fx, u, soon.toISOString());
+    const b = await book(fx, u, soonSlot(3));
     await drainFanOut();
     const reminders = (await deliveries(b.bookingId)).filter((r) => r.template === "booking.reminder");
     expect(reminders.map((r) => r.dedupe_key.split(":")[3])).toEqual(["120"]);

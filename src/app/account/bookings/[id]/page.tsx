@@ -84,6 +84,7 @@ async function Detail({ params, searchParams }: { params: Props["params"]; searc
           {b.status === "confirmed" ? <a href={`/api/v1/bookings/${b.id}/calendar.ics`} className="btn btn-secondary py-1.5 text-sm">Add to calendar</a> : null}
           {b.publicPhone ? <a href={`tel:${b.publicPhone}`} className="btn btn-quiet py-1.5 text-sm">Call clinic</a> : null}
           {!upcoming ? <Link href={`${b.practitionerPath}/book?o=${b.offeringId}`} className="btn btn-quiet py-1.5 text-sm">Book again</Link> : null}
+          {b.status === "completed" ? <Link href={`/account/bookings/${b.id}/review`} className="btn btn-secondary py-1.5 text-sm">Review this appointment</Link> : null}
         </div>
       </section>
 

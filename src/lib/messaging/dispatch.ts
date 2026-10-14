@@ -21,7 +21,7 @@ import { sms } from "./sms";
 
 const CONSUMER = "notifications";
 const LEASE_MINUTES = 5;
-export const NOTIFIED_EVENTS = ["booking.confirmed", "booking.rescheduled", "booking.cancelled", "booking.cancellation_requested", "verification.decided"];
+export const NOTIFIED_EVENTS = ["booking.confirmed", "booking.rescheduled", "booking.cancelled", "booking.cancellation_requested", "booking.completed", "verification.decided"];
 
 type Channel = "sms" | "email";
 type Recipient = { type: "user" | "patient"; id: string };
@@ -41,6 +41,7 @@ type BookingRow = {
   status: string;
   version: number;
   starts_at: Date;
+  completed_at: Date | null;
   source: string;
   notify_patient: boolean;
   booked_by_user_id: string | null;
@@ -56,8 +57,9 @@ function appUrl(): string {
 
 /** Fan out one batch of outbox events. Returns how many events were consumed. */
 export async function fanOutBatch(limit = 50): Promise<number> {
-  const cfg = await getConfigMap(["reminders.offsets_minutes", "notifications.max_event_age_hours"]);
+  const cfg = await getConfigMap(["reminders.offsets_minutes", "notifications.max_event_age_hours", "reviews.invite_delay_minutes"]);
   const offsets = Array.isArray(cfg["reminders.offsets_minutes"]) ? (cfg["reminders.offsets_minutes"] as number[]).map(Number) : [1440, 120];
+  const inviteDelay = Number(cfg["reviews.invite_delay_minutes"] ?? 120);
   const maxAgeHours = Number(cfg["notifications.max_event_age_hours"] ?? 24);
 
   return withTransaction(async (_c, tx) => {
@@ -73,14 +75,14 @@ export async function fanOutBatch(limit = 50): Promise<number> {
     for (const ev of res.rows) {
       const ageHours = (Date.now() - new Date(ev.occurred_at).getTime()) / 3_600_000;
       // Old events (worker outage, first deploy) are consumed silently rather than sent late.
-      if (ageHours <= maxAgeHours) await planEvent(tx, ev, offsets);
+      if (ageHours <= maxAgeHours) await planEvent(tx, ev, offsets, inviteDelay);
       await tx.execute(sql`INSERT INTO processed_events (consumer, event_id) VALUES (${CONSUMER}, ${ev.event_id}) ON CONFLICT DO NOTHING`);
     }
     return res.rows.length;
   });
 }
 
-async function planEvent(tx: Db, ev: OutboxRow, offsets: number[]) {
+async function planEvent(tx: Db, ev: OutboxRow, offsets: number[], inviteDelayMinutes: number) {
   if (ev.event_type === "verification.decided") {
     const userId = typeof ev.payload.recipientUserId === "string" ? ev.payload.recipientUserId : null;
     if (userId) await queueFor(tx, ev, { type: "user", id: userId }, "verification.decided", { bookingId: null });
@@ -89,7 +91,7 @@ async function planEvent(tx: Db, ev: OutboxRow, offsets: number[]) {
 
   const b = (
     await tx.execute<BookingRow>(sql`
-      SELECT b.id, b.status, b.version, b.starts_at, b.source, b.notify_patient, b.booked_by_user_id, b.patient_id, p.owner_user_id AS practitioner_user_id
+      SELECT b.id, b.status, b.version, b.starts_at, b.completed_at, b.source, b.notify_patient, b.booked_by_user_id, b.patient_id, p.owner_user_id AS practitioner_user_id
       FROM bookings b JOIN practitioners p ON p.id = b.practitioner_id
       WHERE b.id = ${ev.aggregate_id}`)
   ).rows[0];
@@ -118,6 +120,13 @@ async function planEvent(tx: Db, ev: OutboxRow, offsets: number[]) {
       await cancelPendingReminders(tx, b.id);
       if (patient) await queueFor(tx, ev, patient, "booking.cancelled", { bookingId: b.id });
       if (practitioner && by !== "provider") await queueFor(tx, ev, practitioner, "booking.cancelled.practitioner", { bookingId: b.id });
+      break;
+    case "booking.completed":
+      // Review invitation (Section 13): patient only, a fixed delay after the visit was marked completed.
+      if (patient && b.completed_at) {
+        const at = new Date(new Date(b.completed_at).getTime() + inviteDelayMinutes * 60_000);
+        await queueFor(tx, ev, patient, "review.invitation", { bookingId: b.id, scheduledFor: at, keyFor: (ch) => `review-invite:${b.id}:${ch}` });
+      }
       break;
     case "booking.cancellation_requested":
       if (patient) await queueFor(tx, ev, patient, "booking.cancellation_requested", { bookingId: b.id });
@@ -295,12 +304,14 @@ async function bookingVars(d: Leased): Promise<Vars | "stale"> {
       pin_code: string;
       total_paise: string | number | null;
       cutoff_hours: number | null;
+      has_review: boolean;
     }>(sql`
       SELECT b.id, b.reference, b.status, b.version, b.starts_at,
              pr.display_name AS practitioner_name, pr.slug || '-' || pr.public_id AS practitioner_path,
              br.name AS branch_name, c.name AS clinic_name, l.name AS locality, ci.name AS city, br.address_line1, br.address_line2, br.pin_code,
              s.total_paise,
-             (SELECT (value #>> '{}')::int FROM platform_config WHERE key = 'booking.self_service_cutoff_hours') AS cutoff_hours
+             (SELECT (value #>> '{}')::int FROM platform_config WHERE key = 'booking.self_service_cutoff_hours') AS cutoff_hours,
+             EXISTS (SELECT 1 FROM reviews r WHERE r.booking_id = b.id) AS has_review
       FROM bookings b
       JOIN practitioners pr ON pr.id = b.practitioner_id
       JOIN branches br ON br.id = b.branch_id
@@ -317,6 +328,8 @@ async function bookingVars(d: Leased): Promise<Vars | "stale"> {
     const stale = b.status !== "confirmed" || Number(b.version) !== Number(d.aggregate_version) || new Date(b.starts_at).getTime() <= Date.now();
     if (stale) return "stale";
   }
+  // A review invitation is pointless once the visit is no longer completed or already reviewed.
+  if (d.template_event === "review.invitation" && (b.status !== "completed" || b.has_review)) return "stale";
 
   const base = appUrl();
   return {
@@ -332,6 +345,7 @@ async function bookingVars(d: Leased): Promise<Vars | "stale"> {
     // Opaque booking id; the page requires sign-in before any change (MSG-02).
     manageUrl: `${base}/account/bookings/${b.id}`,
     rebookUrl: `${base}/physiotherapist/${b.practitioner_path}`,
+    reviewUrl: `${base}/account/bookings/${b.id}/review`,
     workspaceUrl: `${base}/workspace/appointments`,
   };
 }
