@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { EmptyCoverage } from "@/components/empty-coverage";
+import { DirectoryResults, filtersFromSearchParams, type RawSearchParams } from "@/components/directory-results";
 import { getCityBySlug, getStateBySlug, listLocalities } from "@/lib/geo";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
@@ -21,16 +21,16 @@ export async function generateMetadata({ params }: PageProps<"/physiotherapists/
   };
 }
 
-export default function Page({ params }: PageProps<"/physiotherapists/[state]/[city]">) {
+export default function Page({ params, searchParams }: PageProps<"/physiotherapists/[state]/[city]">) {
   return (
     <Suspense fallback={<div className="mx-auto max-w-6xl px-4 py-8 text-muted">Loading…</div>}>
-      <CityPage params={params} />
+      <CityPage params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function CityPage({ params }: { params: PageProps<"/physiotherapists/[state]/[city]">["params"] }) {
-  const { state: stateSlug, city: citySlug } = await params;
+async function CityPage({ params, searchParams }: { params: PageProps<"/physiotherapists/[state]/[city]">["params"]; searchParams: PageProps<"/physiotherapists/[state]/[city]">["searchParams"] }) {
+  const [{ state: stateSlug, city: citySlug }, sp] = await Promise.all([params, searchParams]);
   await connection();
   const state = await getStateBySlug(stateSlug);
   if (!state) notFound();
@@ -38,6 +38,8 @@ async function CityPage({ params }: { params: PageProps<"/physiotherapists/[stat
   if (!city) notFound();
   const localities = await listLocalities(city.id);
   const total = localities.reduce((n, l) => n + l.publishedPractitionerCount, 0);
+  const basePath = `/physiotherapists/${state.slug}/${city.slug}`;
+  const filters = filtersFromSearchParams(sp as RawSearchParams, { stateSlug: state.slug, citySlug: city.slug });
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <Breadcrumbs
@@ -53,9 +55,9 @@ async function CityPage({ params }: { params: PageProps<"/physiotherapists/[stat
       <p className="mt-2 max-w-2xl text-muted">
         {total > 0 ? `${total} published physiotherapists across ${localities.length} localities.` : `Listings in ${city.name} are being onboarded. Pick a locality to see what is published there.`}
       </p>
-      {total === 0 ? <EmptyCoverage scope={city.name} backHref={`/physiotherapists/${state.slug}`} backLabel={state.name} /> : null}
+      <DirectoryResults filters={filters} basePath={basePath} scopeLabel={city.name} broaderHref={`/physiotherapists/${state.slug}`} broaderLabel={state.name} />
       {localities.length > 0 ? (
-        <section className="mt-8">
+        <section className="mt-12">
           <h2 className="text-lg font-semibold">Localities in {city.name}</h2>
           <ul className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
             {localities.map((l) => (

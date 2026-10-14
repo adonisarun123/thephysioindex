@@ -1,15 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fbfaf7;
-  --foreground: #16211f;
-  --muted: #5b6b68;
+  --background: #f6f7f5;
+  --foreground: #14201e;
+  --muted: #566664;
   --surface: #ffffff;
-  --line: #e4e7e3;
-  --brand: #0f6f6a;
-  --brand-ink: #0a4f4b;
-  --brand-soft: #e3f2f0;
-  --accent: #d9792b;
+  --line: #dfe4e1;
+  --brand: #0d6b66;
+  --brand-ink: #094c48;
+  --brand-soft: #e2f0ee;
+  --mark: #c9931a; /* marigold: bookable / focus only */
+  --mark-soft: #fbf1d9;
+  --slate: #6b7a78;
 }
 
 @theme inline {
@@ -21,7 +23,9 @@
   --color-brand: var(--brand);
   --color-brand-ink: var(--brand-ink);
   --color-brand-soft: var(--brand-soft);
-  --color-accent: var(--accent);
+  --color-mark: var(--mark);
+  --color-mark-soft: var(--mark-soft);
+  --color-slate: var(--slate);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -30,9 +34,14 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
 }
 
 :focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--mark);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

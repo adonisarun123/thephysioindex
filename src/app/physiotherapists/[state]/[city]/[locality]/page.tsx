@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
-import { EmptyCoverage } from "@/components/empty-coverage";
+import { DirectoryResults, filtersFromSearchParams, type RawSearchParams } from "@/components/directory-results";
+import { searchPractitioners } from "@/lib/directory";
 import { getCityBySlug, getLocalityBySlug, getStateBySlug } from "@/lib/geo";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
@@ -14,25 +15,26 @@ export async function generateMetadata({ params }: PageProps<"/physiotherapists/
   const city = state ? await getCityBySlug(state.id, p.city) : null;
   const locality = city ? await getLocalityBySlug(city.id, p.locality) : null;
   if (!state || !city || !locality) return { title: "Not found" };
+  const { total } = await searchPractitioners({ stateSlug: state.slug, citySlug: city.slug, localitySlug: locality.slug, limit: 1 });
   return {
     title: `Physiotherapists in ${locality.name}, ${city.name}`,
     description: `Physiotherapists in ${locality.name}, ${city.name}. Compare qualifications, fees and availability and book a clinic visit.`,
     alternates: { canonical: `/physiotherapists/${state.slug}/${city.slug}/${locality.slug}` },
     // Empty location pages are noindexed until approved profiles exist (SEO-02).
-    robots: { index: false, follow: true },
+    robots: total > 0 ? { index: true, follow: true } : { index: false, follow: true },
   };
 }
 
-export default function Page({ params }: PageProps<"/physiotherapists/[state]/[city]/[locality]">) {
+export default function Page({ params, searchParams }: PageProps<"/physiotherapists/[state]/[city]/[locality]">) {
   return (
     <Suspense fallback={<div className="mx-auto max-w-6xl px-4 py-8 text-muted">Loading…</div>}>
-      <LocalityPage params={params} />
+      <LocalityPage params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function LocalityPage({ params }: { params: PageProps<"/physiotherapists/[state]/[city]/[locality]">["params"] }) {
-  const { state: stateSlug, city: citySlug, locality: localitySlug } = await params;
+async function LocalityPage({ params, searchParams }: { params: PageProps<"/physiotherapists/[state]/[city]/[locality]">["params"]; searchParams: PageProps<"/physiotherapists/[state]/[city]/[locality]">["searchParams"] }) {
+  const [{ state: stateSlug, city: citySlug, locality: localitySlug }, sp] = await Promise.all([params, searchParams]);
   await connection();
   const state = await getStateBySlug(stateSlug);
   if (!state) notFound();
@@ -55,8 +57,13 @@ async function LocalityPage({ params }: { params: PageProps<"/physiotherapists/[
       <h1 className="mt-3 text-3xl font-semibold tracking-tight">
         Physiotherapists in {locality.name}, {city.name}
       </h1>
-      {/* Practitioner cards arrive with the directory release (milestone 2). */}
-      <EmptyCoverage scope={locality.name} backHref={`/physiotherapists/${state.slug}/${city.slug}`} backLabel={`all of ${city.name}`} />
+      <DirectoryResults
+        filters={filtersFromSearchParams(sp as RawSearchParams, { stateSlug: state.slug, citySlug: city.slug, localitySlug: locality.slug })}
+        basePath={`/physiotherapists/${state.slug}/${city.slug}/${locality.slug}`}
+        scopeLabel={`${locality.name}, ${city.name}`}
+        broaderHref={`/physiotherapists/${state.slug}/${city.slug}`}
+        broaderLabel={`all of ${city.name}`}
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:vercel": "npm run db:migrate && npm run db:seed && next build",
+    "build:vercel": "npm run db:migrate && npm run db:seed && npm run db:seed:dev && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
@@ -13,7 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed:dev": "tsx scripts/seed-dev.ts"
   },
   "dependencies": {
     "@neon/config": "^1.9.1",
