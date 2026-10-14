@@ -116,7 +116,7 @@ export const twoFactor = authSchema.table(
 
 /** Better Auth database rate-limit storage (IAM-07, SEC-05). */
 export const rateLimit = authSchema.table("rate_limit", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
   key: text("key"),
   count: integer("count"),
   lastRequest: bigint("last_request", { mode: "number" }),
