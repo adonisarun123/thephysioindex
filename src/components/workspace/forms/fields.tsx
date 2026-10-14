@@ -2,6 +2,7 @@ import type { AuthorityOption, OfferingDefaults, Option } from "@/lib/workspace/
 import { paiseToRupeesInput } from "@/lib/workspace/forms";
 import type { OfferingRow } from "@/lib/workspace/queries";
 import { Field, Select } from "./ui";
+import { PlaceCascade } from "./place-cascade";
 
 /** Offering fields (CAL-02, CAL-03). Values default from platform_config; bounds are shown and enforced server-side. */
 export function OfferingFields({ services, defaults, value, idPrefix = "" }: { services: Option[]; defaults: OfferingDefaults; value?: OfferingRow; idPrefix?: string }) {
@@ -62,8 +63,8 @@ export function OfferingFields({ services, defaults, value, idPrefix = "" }: { s
 }
 
 /**
- * New clinic + branch fields (LOC-01). Location selects cascade through
- * server round-trips (GET) so the form works without JavaScript.
+ * New clinic + branch fields (LOC-01). Location selects cascade client-side,
+ * with a GET round-trip fallback when JavaScript is unavailable.
  */
 export function ClinicFields({ states, cities, localities, selected, reloadAction }: { states: Option[]; cities: Option[]; localities: Option[]; selected: { stateId?: string; cityId?: string }; reloadAction: string }) {
   return (
@@ -84,34 +85,13 @@ export function ClinicFields({ states, cities, localities, selected, reloadActio
           <input id="addressLine2" name="addressLine2" className="input" maxLength={200} />
         </Field>
       </div>
-      <Field label="State" htmlFor="stateId">
-        <Select id="stateId" name="stateId" options={states} value={selected.stateId} required />
-      </Field>
-      <Field label="City" htmlFor="cityId" hint={!selected.stateId ? "Choose a state, then load cities." : undefined}>
-        <Select id="cityId" name="cityId" options={cities} value={selected.cityId} placeholder={selected.stateId ? "Select…" : "Load cities first"} required />
-      </Field>
-      <Field label="Locality" htmlFor="localityId" hint="Not listed? Choose “Propose a new locality” and type its name; it goes to review (DIR-08).">
-        <select id="localityId" name="localityId" className="input" defaultValue="">
-          <option value="">{selected.cityId ? "Select…" : "Load localities first"}</option>
-          {localities.map((l) => (
-            <option key={l.id} value={l.id}>{l.label}</option>
-          ))}
-          <option value="__new">Propose a new locality…</option>
-        </select>
-      </Field>
-      <Field label="New locality name (if proposing)" htmlFor="newLocalityName">
-        <input id="newLocalityName" name="newLocalityName" className="input" maxLength={120} />
-      </Field>
+      <PlaceCascade states={states} cities={cities} localities={localities} selected={selected} reloadAction={reloadAction} />
       <Field label="PIN code" htmlFor="pinCode" hint="Six digits. A PIN code does not identify a locality on its own.">
         <input id="pinCode" name="pinCode" className="input" inputMode="numeric" pattern="[1-9][0-9]{5}" required maxLength={6} />
       </Field>
       <Field label="Clinic phone (public)" htmlFor="phone">
         <input id="phone" name="phone" className="input" inputMode="tel" maxLength={20} />
       </Field>
-      <div className="flex flex-wrap items-center gap-2 text-sm sm:col-span-2">
-        <button type="submit" formAction={reloadAction} formMethod="get" formNoValidate className="btn btn-quiet py-1.5 text-sm">Load cities and localities for the selected state/city</button>
-        <span className="text-muted">Other fields will need re-entering after reloading.</span>
-      </div>
     </div>
   );
 }
