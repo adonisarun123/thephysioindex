@@ -115,6 +115,14 @@ function findTemplates(src: string): { start: number; parts: Part[] }[] {
 
 const SCALAR_HELPERS = /^(textArray|uuidArray|enumArray|jsonb|JSON\.stringify|String|Number|Boolean|Math\.\w+|Date\.\w+|new Date)\b/;
 
+/** The clause the cursor is in: the last top-level clause keyword in the text so far. */
+function clauseOf(before: string): string {
+  const re = /\b(SET|WHERE|SELECT|FROM|VALUES|ORDER BY|GROUP BY|RETURNING|HAVING|ON CONFLICT)\b/gi;
+  let last = "";
+  for (let m = re.exec(before); m; m = re.exec(before)) last = m[1].toUpperCase();
+  return last;
+}
+
 /** Placeholder for an unknown fragment given the SQL text before it. null = cannot place; skip the statement. */
 function contextual(before: string): string | null {
   const b = before.replace(/\s+$/, "");
@@ -123,11 +131,12 @@ function contextual(before: string): string | null {
   if (/\bORDER\s+BY$/i.test(b)) return "1";
   if (/\bSET$/i.test(b)) return "id = id";
   if (/\bIN$/i.test(b)) return "(NULL)";
-  if (/(\bSELECT|,|\(|=|<|>|\bLIMIT|\bOFFSET|\bAS|\bBY|\bRETURNING)$/i.test(b)) return "NULL";
+  if (/,$/.test(b) && clauseOf(b) === "SET") return "id = id";
+  if (/(\bSELECT|,|\(|=|<|>|\bLIMIT|\bOFFSET|\bAS|\bBY|\bRETURNING|\bZONE|\bINTERVAL)$/i.test(b)) return "NULL";
   return "";
 }
 
-type Ctx = { src: string; depth: number; seen: Set<string>; bindings: Record<string, string> };
+type Ctx = { src: string; pos: number; depth: number; seen: Set<string>; bindings: Record<string, string> };
 
 /** Split a call's argument list at top-level commas. */
 function splitArgs(argSrc: string): string[] {
@@ -157,9 +166,12 @@ function paramNames(decl: string): string[] {
 /** Render a parsed template to SQL text; null when a fragment cannot be placed. */
 function render(parts: Part[], before: string, ctx: Ctx): string | null {
   let out = "";
-  for (const p of parts) {
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
     if (p.kind === "text") { out += p.value; continue; }
-    const sub = resolve(p.value, before + out, ctx);
+    const next = parts[i + 1];
+    const after = next && next.kind === "text" ? next.value : "";
+    const sub = resolve(p.value, before + out, ctx, after);
     if (sub === null) return null;
     out += sub;
   }
@@ -185,9 +197,15 @@ function firstTemplate(exprSrc: string, before: string, ctx: Ctx): string | null
 }
 
 /** Initializer source for a same-file const/let/function declaration, or undefined. */
-function declaration(src: string, name: string): string | undefined {
+function declaration(src: string, name: string, pos: number): string | undefined {
   const re = new RegExp(`(?:const|let|var)\\s+${name}\\b[^=;\\n]*=\\s*`, "g");
-  const m = re.exec(src);
+  // Nearest declaration before the template (names like `pid` are reused across functions).
+  let m: RegExpExecArray | null = null;
+  for (let x = re.exec(src); x; x = re.exec(src)) {
+    if (x.index < pos) m = x;
+    else if (!m) { m = x; break; }
+    else break;
+  }
   if (m) {
     const start = m.index + m[0].length;
     // initializer runs to the first `;` at nesting depth 0 (strings and templates skipped)
@@ -214,8 +232,10 @@ function declaration(src: string, name: string): string | undefined {
   return undefined;
 }
 
-function resolve(expr: string, before: string, ctx: Ctx): string | null {
+function resolve(expr: string, before: string, ctx: Ctx, after = ""): string | null {
   if (ctx.depth > 6) return contextual(before);
+  // A cast right after the interpolation marks a scalar parameter (`${x}::uuid`).
+  if (/^\s*::/.test(after)) return "NULL";
   if (/^sql\.raw\(/.test(expr)) {
     const lit = /^sql\.raw\(\s*(["'])(.*)\1\s*\)$/.exec(expr);
     if (lit) return lit[2];
@@ -241,7 +261,7 @@ function resolve(expr: string, before: string, ctx: Ctx): string | null {
       return resolve(ctx.bindings[name], before, { ...ctx, bindings: rest, depth: ctx.depth + 1 });
     }
     if (ctx.seen.has(name)) return contextual(before);
-    const decl = declaration(ctx.src, name);
+    const decl = declaration(ctx.src, name, ctx.pos);
     if (decl !== undefined) {
       if (!/(^|[^\w.$])sql`/.test(decl) && !/\bsql\.(join|raw|identifier)\b/.test(decl)) return "NULL";
       const seen = new Set(ctx.seen); seen.add(name);
@@ -251,11 +271,12 @@ function resolve(expr: string, before: string, ctx: Ctx): string | null {
         const args = splitArgs(id[2].trim().slice(1, -1));
         paramNames(decl).forEach((p, i) => { if (args[i] !== undefined) bindings[p] = args[i]; });
       }
-      const r = firstTemplate(decl, before, { src: ctx.src, depth: ctx.depth + 1, seen, bindings });
+      const r = firstTemplate(decl, before, { src: ctx.src, pos: ctx.pos, depth: ctx.depth + 1, seen, bindings });
       if (r !== undefined) return r;
       return contextual(before);
     }
-    // Undeclared (imported or parameter): decide by the SQL around it.
+    // Undeclared (imported or parameter): UPPER_CASE constants are strings; otherwise decide by the SQL around it.
+    if (/^[A-Z][A-Z0-9_]*$/.test(name) && !id[2]) return "NULL";
     return contextual(before);
   }
   // Member access, arithmetic, ternaries without sql, object literals: scalar parameters.
@@ -282,7 +303,7 @@ async function main() {
   for (const f of files) {
     const src = readFileSync(f, "utf8");
     for (const t of findTemplates(src)) {
-      const text = render(t.parts, "", { src, depth: 0, seen: new Set(), bindings: {} });
+      const text = render(t.parts, "", { src, pos: t.start, depth: 0, seen: new Set(), bindings: {} });
       found.push({ file: relative(root, f), line: lineOf(src, t.start), text: text === null ? null : cleanup(text) });
     }
   }
