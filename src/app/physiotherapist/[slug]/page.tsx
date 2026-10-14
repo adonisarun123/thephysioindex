@@ -136,7 +136,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
 
         {p.headline ? <p className="t-body-lg mt-5 max-w-3xl">{p.headline}</p> : null}
 
-        <dl className="mt-5 grid gap-x-6 gap-y-4 border-t border-line pt-5 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-line pt-5 md:gap-x-6 lg:grid-cols-4">
           {primaryBranch ? (
             <Fact icon={<PinIcon />} label="Location">
               {primaryBranch.localityName}, {primaryBranch.cityName}
@@ -248,7 +248,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                                 </p>
                               </div>
                               <div className="flex items-center justify-between gap-4 sm:justify-end">
-                                <div className="text-right">
+                                <div className="sm:text-right">
                                   <p className="font-semibold">{formatPaise(o.basePricePaise)}</p>
                                   {extra > 0 ? <p className="text-xs text-muted">+ {formatPaise(extra)} taxes &amp; charges</p> : null}
                                 </div>
@@ -496,7 +496,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
         <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="font-semibold">{minFee != null ? <>From {formatPaise(minFee)}</> : "Fees on enquiry"}</p>
-            <p className="truncate text-xs text-muted">{p.bookable ? "Instant confirmation · pay at clinic" : "Online booking unavailable"}</p>
+            <p className="truncate text-xs text-muted">{p.bookable ? "Instant confirmation" : "Online booking unavailable"}</p>
           </div>
           <div className="flex shrink-0 gap-2">
             {!p.bookable && primaryBranch?.publicPhone ? (
@@ -516,7 +516,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
 
 function Section({ id, title, note, aside, children }: { id: string; title: string; note?: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="card scroll-mt-32 p-5 md:scroll-mt-40 md:p-6">
+    <section id={id} aria-labelledby={`${id}-h`} className="card scroll-mt-32 p-4 sm:p-5 md:scroll-mt-40 md:p-6">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
         <h2 id={`${id}-h`} className="t-section text-navy">{title}</h2>
         {aside}
