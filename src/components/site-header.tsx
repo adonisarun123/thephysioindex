@@ -1,9 +1,15 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { getViewer } from "@/lib/auth/session";
 import { Logo } from "./logo";
 
 /** Public shell header per Visual Design Specification §6.1. */
+/** Routes that carry their own shell (admin sidebar, practitioner workspace) and must not get the public chrome. */
+export const APP_SHELL_PATH = /^\/(admin|workspace)(\/|$)/;
+
 export async function SiteHeader() {
+  const h = await headers();
+  if (APP_SHELL_PATH.test(h.get("x-pathname") ?? "")) return null;
   const viewer = await getViewer().catch(() => null);
   const accountHref = viewer ? (viewer.kind === "staff" ? "/admin" : viewer.kind === "practitioner" ? "/workspace" : "/account") : null;
   const accountLabel = viewer ? (viewer.kind === "staff" ? "Admin" : viewer.kind === "practitioner" ? "Workspace" : "My account") : null;

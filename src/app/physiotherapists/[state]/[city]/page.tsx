@@ -37,7 +37,7 @@ async function CityPage({ params, searchParams }: { params: PageProps<"/physioth
   const city = await getCityBySlug(state.id, citySlug);
   if (!city) notFound();
   const localities = await listLocalities(city.id);
-  const total = localities.reduce((n, l) => n + l.publishedPractitionerCount, 0);
+  const total = city.publishedPractitionerCount;
   const basePath = `/physiotherapists/${state.slug}/${city.slug}`;
   const filters = filtersFromSearchParams(sp as RawSearchParams, { stateSlug: state.slug, citySlug: city.slug });
   return (

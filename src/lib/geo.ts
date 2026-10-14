@@ -78,7 +78,24 @@ export async function listCities(stateId: string): Promise<CitySummary[]> {
 
 export async function getCityBySlug(stateId: string, slug: string) {
   const [row] = await db()
-    .select()
+    .select({
+      id: cities.id,
+      stateId: cities.stateId,
+      name: cities.name,
+      slug: cities.slug,
+      isMetro: cities.isMetro,
+      tier: cities.tier,
+      status: cities.status,
+      // Distinct practitioners (DIR-11): a practitioner with branches in two localities counts once.
+      publishedPractitionerCount: sql<number>`(
+        select count(distinct pb.practitioner_id)::int
+        from practitioner_branches pb
+        join branches b on b.id = pb.branch_id
+        join practitioners p on p.id = pb.practitioner_id
+        where b.city_id = "cities"."id" and pb.state = 'approved' and pb.active_to is null
+          and p.listing_status = 'published' and b.status = 'published'
+      )`,
+    })
     .from(cities)
     .where(and(eq(cities.stateId, stateId), eq(cities.slug, slug), eq(cities.status, "active")))
     .limit(1);

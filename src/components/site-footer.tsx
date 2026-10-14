@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { Logo } from "./logo";
+import { APP_SHELL_PATH } from "./site-header";
 
 /** Public footer per Visual Design Specification §6.1. */
-export function SiteFooter() {
+export async function SiteFooter() {
+  const h = await headers();
+  if (APP_SHELL_PATH.test(h.get("x-pathname") ?? "")) return null;
   return (
     <footer className="mt-24 border-t border-line bg-surface text-sm text-muted">
       <div className="mx-auto grid max-w-[1280px] gap-10 px-4 py-14 md:grid-cols-4 md:px-6">
