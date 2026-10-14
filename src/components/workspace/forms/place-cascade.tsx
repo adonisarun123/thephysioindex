@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Option } from "@/lib/workspace/catalog";
 
 type Props = { states: Option[]; cities: Option[]; localities: Option[]; selected: { stateId?: string; cityId?: string }; reloadAction: string };
@@ -15,8 +15,6 @@ export function PlaceCascade({ states, cities: initialCities, localities: initia
   const [cities, setCities] = useState<Option[]>(initialCities);
   const [localities, setLocalities] = useState<Option[]>(initialLocalities);
   const [loading, setLoading] = useState<"cities" | "localities" | null>(null);
-  const [js, setJs] = useState(false);
-  useEffect(() => setJs(true), []);
 
   async function load(kind: "cities" | "localities", id: string) {
     setLoading(kind);
@@ -63,12 +61,12 @@ export function PlaceCascade({ states, cities: initialCities, localities: initia
         <label className="label" htmlFor="newLocalityName">New locality name (if proposing)</label>
         <input id="newLocalityName" name="newLocalityName" className="input" maxLength={120} />
       </div>
-      {!js ? (
+      <noscript>
         <div className="text-sm sm:col-span-2">
           <button type="submit" formAction={reloadAction} formMethod="get" formNoValidate className="btn btn-quiet py-1.5 text-sm">Load cities and localities for the selected state/city</button>
           <span className="ml-2 text-muted">Other fields will need re-entering after reloading.</span>
         </div>
-      ) : null}
+      </noscript>
     </>
   );
 }
