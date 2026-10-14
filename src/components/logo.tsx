@@ -1,13 +1,18 @@
-/** Wordmark with the range-of-motion arc motif. */
-export function Logo({ className = "" }: { className?: string }) {
+import Image from "next/image";
+
+/**
+ * TPi mark (concept raster supplied by the owner; production SVG master pending
+ * per Visual Design Specification §3.1). Proportions preserved; clear space is
+ * provided by the surrounding layout.
+ */
+export function Logo({ size = "md", withName = true }: { size?: "sm" | "md" | "lg"; withName?: boolean }) {
+  const width = size === "sm" ? 64 : size === "lg" ? 104 : 88;
+  const height = Math.round(width * (590 / 1270));
   return (
-    <span className={`inline-flex items-center gap-2 ${className}`}>
-      <svg aria-hidden width="28" height="28" viewBox="0 0 28 28" fill="none">
-        <path d="M4 22a10 10 0 0 1 20 0" stroke="var(--moss)" strokeWidth="3" strokeLinecap="round" />
-        <path d="M9 22a5 5 0 0 1 10 0" stroke="var(--amber)" strokeWidth="3" strokeLinecap="round" />
-        <circle cx="14" cy="22" r="2" fill="var(--moss-ink)" />
-      </svg>
-      <span className="font-bold tracking-tight text-brand-ink">The Physio Index</span>
+    <span className="inline-flex items-center gap-3">
+      <Image src="/brand/tpi-logo-400.png" alt="" width={width} height={height} priority className="h-auto" style={{ width }} />
+      {withName ? <span className="hidden text-base font-semibold text-navy sm:inline">The Physio Index</span> : null}
+      <span className="sr-only">The Physio Index</span>
     </span>
   );
 }

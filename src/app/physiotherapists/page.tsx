@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SearchForm } from "@/components/search-form";
+import { DirectoryResults, filtersFromSearchParams, type RawSearchParams } from "@/components/directory-results";
 import { listStates, resolvePlace } from "@/lib/geo";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
@@ -34,12 +35,16 @@ export default function Page({ searchParams }: PageProps<"/physiotherapists">) {
 async function SearchSection({ searchParams }: { searchParams: PageProps<"/physiotherapists">["searchParams"] }) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
+  const hasFilters = ["specialty", "language", "verification", "gender", "bookable", "fee_min", "fee_max"].some((k) => typeof sp[k] === "string" && sp[k]);
   return (
     <>
       <div className="mt-6 max-w-2xl">
         <SearchForm defaultQuery={q} />
       </div>
       {q ? <PlaceResults q={q} /> : null}
+      {hasFilters ? (
+        <DirectoryResults filters={filtersFromSearchParams(sp as RawSearchParams, {})} basePath="/physiotherapists" scopeLabel="India" broaderHref="/physiotherapists" broaderLabel="all locations" />
+      ) : null}
     </>
   );
 }
