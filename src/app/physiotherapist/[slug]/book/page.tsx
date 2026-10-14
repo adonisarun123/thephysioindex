@@ -1,3 +1,4 @@
+import { track } from "@/lib/analytics";
 import { randomUUID } from "node:crypto";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -52,6 +53,8 @@ async function Book({ params, searchParams }: { params: Props["params"]; searchP
   const today = todayLocal();
   const date = typeof sp.d === "string" && isLocalDate(sp.d) && sp.d >= today ? sp.d : today;
   const startsAt = typeof sp.t === "string" ? sp.t : undefined;
+  // ANA-02: one booking start per entry into the flow, not per date or slot change.
+  if (sp.d === undefined && sp.t === undefined && !msg.error) void track("booking_start", { practitionerId: practitioner.id, properties: { offeringSelected: Boolean(offeringId) } });
 
   const branches = new Map<string, typeof offerings>();
   for (const o of offerings) branches.set(`${o.ctx.clinicName} · ${o.ctx.branchName}`, [...(branches.get(`${o.ctx.clinicName} · ${o.ctx.branchName}`) ?? []), o]);

@@ -1,3 +1,4 @@
+import { resultBucket, track } from "@/lib/analytics";
 import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
@@ -60,6 +61,14 @@ export async function DirectoryResults({
     db().select({ code: languages.code, label: languages.label }).from(languages).where(eq(languages.active, true)).orderBy(asc(languages.sortOrder)),
   ]);
   const active = activeFilterCount(filters);
+  // ANA-02: first page of results only, no free text (the query could contain a name or a condition).
+  if (!filters.cursor) {
+    void track("search", {
+      stateSlug: filters.stateSlug,
+      citySlug: filters.citySlug,
+      properties: { hasQuery: Boolean(filters.q), specialty: filters.specialtySlug, language: filters.languageCode, bookableOnly: filters.bookable, resultBucket: resultBucket(result.items.length), page: "first" },
+    });
+  }
   const nextHref = result.nextCursor ? `${basePath}?${new URLSearchParams({ ...stripCursor(filters), cursor: result.nextCursor }).toString()}` : null;
 
   return (

@@ -1,3 +1,4 @@
+import { track } from "@/lib/analytics";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -56,6 +57,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   if (!data) notFound();
   const { profile: p, canonicalSlug } = data;
   if (slug !== canonicalSlug) permanentRedirect(`/physiotherapist/${canonicalSlug}`); // DIR-06, SEO-05
+  if (p.listingStatus === "published") void track("profile_view", { practitionerId: p.id }); // ANA-02
 
   if (p.listingStatus === "suspended") {
     return (

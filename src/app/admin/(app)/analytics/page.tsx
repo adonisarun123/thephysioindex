@@ -36,6 +36,7 @@ async function Body({ searchParams }: { searchParams: PageProps<"/admin/analytic
         <div><label className="label" htmlFor="to">To</label><Input name="to" type="date" defaultValue={to} className="py-1.5" /></div>
         <div><label className="label" htmlFor="dateType">Date type (ANA-01)</label><Select name="dateType" defaultValue={dateType} className="py-1.5" options={[{ value: "appointment", label: "Appointment date" }, { value: "created", label: "Creation date" }, { value: "completed", label: "Completion date" }]} /></div>
         <button className="btn btn-secondary py-1.5" type="submit">Apply</button>
+        <a className="btn btn-quiet py-1.5" href={`/admin/analytics/export?from=${from}&to=${to}&dateType=${dateType}`}>Download CSV</a>
         <span className="ml-auto text-xs text-muted">Refreshed {fmtDateTime(a.refreshedAt)} (computed on request)</span>
       </form>
 
@@ -55,12 +56,20 @@ async function Body({ searchParams }: { searchParams: PageProps<"/admin/analytic
           <h3 className="mt-3 text-sm font-semibold">By source</h3>
           <ul className="text-sm">{a.bySource.map((s) => <li key={s.source}>{s.source.replace("_", " ")}: {suppress(s.n)}</li>)}{a.bySource.length === 0 ? <li className="text-muted">—</li> : null}</ul>
         </Section>
+        <Section title={`Funnel (${from} → ${to})`}>
+          <Table head={["Step", "Count", "Notes"]}>
+            <tr><Td>Searches</Td><Td>{suppress(a.funnel.searches)}</Td><Td className="text-xs text-muted">First results page; no query text stored</Td></tr>
+            <tr><Td>Profile views</Td><Td>{suppress(a.funnel.profileViews)}</Td><Td className="text-xs text-muted">Published profiles</Td></tr>
+            <tr><Td>Booking starts</Td><Td>{suppress(a.funnel.bookingStarts)}</Td><Td className="text-xs text-muted">Entries into the booking flow</Td></tr>
+            <tr><Td>Confirmed platform bookings</Td><Td>{suppress(a.conversion.confirmed)}</Td><Td className="text-xs text-muted">From booking records, by creation date</Td></tr>
+          </Table>
+        </Section>
         <Section title="Rates">
           <Table head={["Metric", "Value", "Definition"]}>
             <tr><Td>Cancellation rate</Td><Td className="font-semibold">{pct(cancelled, a.cancellation.confirmedCohort)}</Td><Td className="text-xs text-muted">{suppress(cancelled)} cancelled of {suppress(a.cancellation.confirmedCohort)} confirmed cohort · patient {suppress(a.cancellation.patient)} · provider {suppress(a.cancellation.provider)}</Td></tr>
             <tr><Td>No-show rate</Td><Td className="font-semibold">{pct(a.noShow.noShow, elapsed)}</Td><Td className="text-xs text-muted">{suppress(a.noShow.noShow)} no-shows of {suppress(elapsed)} elapsed appointments (completed + no-show)</Td></tr>
-            <tr><Td>Booking conversion</Td><Td className="font-semibold">{a.conversion.starts ? pct(a.conversion.confirmed, a.conversion.starts) : "—"}</Td><Td className="text-xs text-muted">{suppress(a.conversion.confirmed)} confirmed platform bookings / {suppress(a.conversion.starts)} tracked booking starts (creation date). Gap: starts are only tracked once the booking flow emits analytics events (ANA-02).</Td></tr>
-            <tr><Td>Utilisation</Td><Td className="font-semibold">—</Td><Td className="text-xs text-muted">Needs the published-availability projection from the scheduling release; not computed yet.</Td></tr>
+            <tr><Td>Booking conversion</Td><Td className="font-semibold">{a.conversion.starts ? pct(a.conversion.confirmed, a.conversion.starts) : "—"}</Td><Td className="text-xs text-muted">{suppress(a.conversion.confirmed)} confirmed platform bookings / {suppress(a.conversion.starts)} booking starts (creation date). Gaps: starts are recorded from {a.funnel.trackedSince ? fmtDateTime(a.funnel.trackedSince) : "the analytics release (none yet)"}; bots and link previewers are not counted; one start per entry into the booking flow (ANA-02).</Td></tr>
+            <tr><Td>Utilisation</Td><Td className="font-semibold">{a.utilisation.ratio == null ? "—" : pct(a.utilisation.bookedMinutes, a.utilisation.availableMinutes)}</Td><Td className="text-xs text-muted">{a.utilisation.bookedMinutes.toLocaleString("en-IN")} booked service minutes / {a.utilisation.availableMinutes.toLocaleString("en-IN")} published available minutes (appointment dates in range). Available excludes leave, blocks and external busy time; buffers count as available but not booked, so a full calendar reads below 100 %.</Td></tr>
           </Table>
         </Section>
       </div>
