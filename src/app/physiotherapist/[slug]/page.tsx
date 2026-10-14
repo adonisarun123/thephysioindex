@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { ProfileToc } from "@/components/profile-toc";
 import { VerificationBadge } from "@/components/verification-badge";
 import { getPublicProfile, resolvePractitionerSlug, type PublicProfile } from "@/lib/directory";
 import { formatPaise } from "@/lib/money";
@@ -80,21 +81,37 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
     { label: p.displayName },
   ];
 
+  const tocItems = (
+    [
+      ["overview", "About", Boolean(p.about)],
+      ["expertise", "Areas of practice", p.specialties.length > 0],
+      ["registrations", "Registrations", true],
+      ["education", "Education", p.qualifications.length > 0],
+      ["experience", "Experience", p.experiences.length > 0],
+      ["clinics", "Clinics and services", true],
+      ["availability", "Availability", true],
+      ["reviews", "Reviews", true],
+      ["achievements", "Achievements", p.portfolio.length > 0],
+    ] as const
+  )
+    .filter(([, , show]) => show)
+    .map(([id, label]) => ({ id, label }));
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 pb-28 lg:pb-12">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(practitionerJsonLd(p, siteUrl)) }} />
       <Breadcrumbs siteUrl={siteUrl} items={crumbs} />
 
-      <div className="mt-5 grid gap-8 lg:grid-cols-[1fr_20rem]">
-        {/* Summary first on mobile (DIR-02) */}
+      <div className="mt-5 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* Summary first on every width (DIR-02); the booking rail sits beside the content on desktop only. */}
         <header className="lg:col-span-2">
           <div className="flex flex-wrap items-start gap-4">
-            <div aria-hidden className="flex h-20 w-20 items-center justify-center rounded-lg bg-brand-soft text-2xl font-semibold text-brand-ink">
+            <div aria-hidden className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-xl font-semibold text-brand-ink sm:h-20 sm:w-20 sm:text-2xl">
               {p.displayName.split(/\s+/).filter((w) => !/^dr\.?$/i.test(w)).slice(0, 2).map((w) => w[0]).join("")}
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="text-3xl font-semibold tracking-tight">{p.displayName}</h1>
-              <p className="mt-1 text-lg text-muted">
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{p.displayName}</h1>
+              <p className="mt-1 text-base text-muted sm:text-lg">
                 {p.designation ?? "Physiotherapist"}
                 {p.qualifications[0] ? `, ${p.qualifications[0].degree}` : ""}
               </p>
@@ -113,7 +130,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
           </div>
         </header>
 
-        <main className="min-w-0">
+        <div className="min-w-0">
           {p.about ? (
             <Section id="overview" title="About">
               <p className="whitespace-pre-line leading-relaxed">{p.about}</p>
@@ -318,62 +335,54 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
           <p className="mt-10 text-xs text-muted">
             <Link href={`/help#report`} className="underline">Report this profile</Link> · <Link href={`/help#correction`} className="underline">Request a correction</Link> · Profile ID {p.publicId}
           </p>
-        </main>
+        </div>
 
-        <aside className="order-first lg:order-none lg:sticky lg:top-4 lg:self-start">
-          <div id="book" className="card p-4">
-            {minFee != null ? (
-              <>
-                <p className="text-2xl font-semibold">{formatPaise(minFee)}</p>
-                <p className="text-sm text-muted">starting fee, pay at clinic</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted">Fees on enquiry</p>
-            )}
-            <div className="mt-4">
-              {p.bookable ? (
-                <Link href={`${p.path}/book`} className="btn btn-primary w-full">
-                  Book an appointment
-                </Link>
+        {/* Desktop rail. Below lg the fixed bottom bar carries the same action, so the card is not repeated above the name. */}
+        <aside className="hidden lg:block">
+          <div className="sticky top-24 grid gap-4">
+            <div id="book" className="card p-5" style={{ boxShadow: "var(--shadow-2)" }}>
+              {minFee != null ? (
+                <p className="text-sm text-muted">
+                  From <span className="text-2xl font-semibold text-foreground">{formatPaise(minFee)}</span>
+                </p>
               ) : (
-                <>
-                  {/* Enquiry for unbookable profiles: not a booking, reserves nothing (Section 2) */}
-                  <Link href={`${p.path}/enquire`} className="btn btn-secondary w-full">
-                    Enquire
-                  </Link>
-                  {primaryBranch?.publicPhone ? (
-                    <a href={`tel:${primaryBranch.publicPhone}`} className="btn btn-quiet mt-2 w-full">
-                      Call clinic
-                    </a>
-                  ) : null}
-                </>
+                <p className="text-sm text-muted">Fees on enquiry</p>
               )}
+              {minFee != null ? <p className="text-xs text-muted">per session, pay at clinic</p> : null}
+              {primaryBranch ? (
+                <p className="mt-3 border-t border-line pt-3 text-sm">
+                  <span className="font-medium">{primaryBranch.clinicName}</span>
+                  <span className="block text-muted">
+                    {primaryBranch.localityName}, {primaryBranch.cityName}
+                    {p.branches.length > 1 ? ` · ${p.branches.length} locations` : ""}
+                  </span>
+                </p>
+              ) : null}
+              <div className="mt-4 grid gap-2">
+                {p.bookable ? (
+                  <Link href={`${p.path}/book`} className="btn btn-primary w-full">
+                    Book an appointment
+                  </Link>
+                ) : (
+                  <>
+                    {/* Enquiry for unbookable profiles: not a booking, reserves nothing (Section 2) */}
+                    <Link href={`${p.path}/enquire`} className="btn btn-secondary w-full">
+                      Enquire
+                    </Link>
+                    {primaryBranch?.publicPhone ? (
+                      <a href={`tel:${primaryBranch.publicPhone}`} className="btn btn-quiet w-full">
+                        Call clinic
+                      </a>
+                    ) : null}
+                  </>
+                )}
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-muted">
+                {p.bookable ? "Instant confirmation. Free cancellation up to 12 hours before." : "Online booking is not available for this profile. An enquiry is not a booking."}
+              </p>
             </div>
-            <p className="mt-3 text-xs text-muted">
-              {p.bookable ? "Instant confirmation. Cancel free up to 12 hours before." : "Online booking is not available for this profile. An enquiry is not a booking."}
-            </p>
+            <ProfileToc items={tocItems} />
           </div>
-          <nav aria-label="On this page" className="mt-4 hidden text-sm lg:block">
-            <ul className="grid gap-1 text-muted">
-              {[
-                ["overview", "About", Boolean(p.about)],
-                ["expertise", "Areas of practice", p.specialties.length > 0],
-                ["registrations", "Registrations", true],
-                ["education", "Education", p.qualifications.length > 0],
-                ["experience", "Experience", p.experiences.length > 0],
-                ["clinics", "Clinics and services", true],
-                ["availability", "Availability", true],
-                ["reviews", "Reviews", true],
-                ["achievements", "Achievements", p.portfolio.length > 0],
-              ]
-                .filter(([, , show]) => show)
-                .map(([id, label]) => (
-                  <li key={id as string}>
-                    <a href={`#${id}`} className="hover:underline">{label as string}</a>
-                  </li>
-                ))}
-            </ul>
-          </nav>
         </aside>
       </div>
 
@@ -384,9 +393,16 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             <p className="font-semibold">{minFee != null ? formatPaise(minFee) : "Fees on enquiry"}</p>
             <p className="text-xs text-muted">{p.bookable ? "Instant confirmation" : "Online booking unavailable"}</p>
           </div>
-          <Link href={p.bookable ? `${p.path}/book` : `${p.path}/enquire`} className="btn btn-primary py-2">
-            {p.bookable ? "Book" : "Contact"}
-          </Link>
+          <div className="flex shrink-0 gap-2">
+            {!p.bookable && primaryBranch?.publicPhone ? (
+              <a href={`tel:${primaryBranch.publicPhone}`} className="btn btn-quiet py-2">
+                Call
+              </a>
+            ) : null}
+            <Link href={p.bookable ? `${p.path}/book` : `${p.path}/enquire`} className="btn btn-primary py-2">
+              {p.bookable ? "Book appointment" : "Enquire"}
+            </Link>
+          </div>
         </div>
       </div>
     </div>
@@ -395,7 +411,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="mt-10 scroll-mt-6 first:mt-0">
+    <section id={id} className="mt-10 scroll-mt-24 first:mt-0">
       <h2 className="text-xl font-semibold">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
