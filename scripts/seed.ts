@@ -82,7 +82,7 @@ async function main() {
   }
   counts.cities = cityIds.size;
 
-  // ---- Localities (one statement per metro) ----
+  // ---- Localities (one statement per city) ----
   let localityCount = 0;
   for (const [cityKey, list] of Object.entries(LOCALITIES)) {
     const cityId = cityIds.get(cityKey);
@@ -96,6 +96,7 @@ async function main() {
       seen.add(slug);
       parsed.push({ name, slug, aliases });
     }
+    if (parsed.length === 0) continue; // e.g. Kavaratti: no reviewed localities yet
     const rows = await db
       .insert(schema.localities)
       .values(parsed.map((p) => ({ cityId, name: p.name, slug: p.slug })))
