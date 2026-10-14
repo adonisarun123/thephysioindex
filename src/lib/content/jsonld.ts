@@ -8,7 +8,7 @@ import type { PublicArticle } from "./public";
  */
 
 function org(siteUrl: string) {
-  return { "@type": "Organization", name: "The Physio Index", url: siteUrl, logo: { "@type": "ImageObject", url: `${siteUrl}/favicon.ico` } };
+  return { "@type": "Organization", name: "The Physio Index", url: siteUrl, logo: { "@type": "ImageObject", url: `${siteUrl}/brand/tpi-logo.png` } };
 }
 
 function author(a: PublicArticle, siteUrl: string) {

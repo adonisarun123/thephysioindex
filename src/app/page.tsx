@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { SearchForm } from "@/components/search-form";
 import { listStates } from "@/lib/geo";
+import { AudienceGrid, CareModes, ConditionGrid, ConditionGridSkeleton, PatientCta } from "@/components/home-sections";
 
 const METROS = [
   ["Bengaluru", "/physiotherapists/karnataka/bengaluru"],
@@ -63,6 +64,12 @@ export default function Home() {
         </div>
       </section>
 
+      <AudienceGrid />
+      <CareModes />
+      <Suspense fallback={<ConditionGridSkeleton />}>
+        <ConditionGrid />
+      </Suspense>
+
       <section className="mx-auto max-w-[1280px] px-4 py-12 md:px-6">
         <div className="flex items-end justify-between gap-4">
           <h2 className="t-section">Browse by state or union territory</h2>
@@ -86,6 +93,8 @@ export default function Home() {
           </Link>
         </div>
       </section>
+
+      <PatientCta />
     </>
   );
 }
