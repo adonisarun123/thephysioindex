@@ -9,6 +9,7 @@ import { audit } from "@/lib/audit";
 import { requireStaff } from "@/lib/auth/session";
 import { act, parseForm, zOpt, zReason, zReq, zUuid } from "@/lib/admin/forms";
 import { actorRole } from "@/lib/admin/practitioner-ops";
+import { textArray } from "@/lib/sql";
 
 function revalidate(clinicId: string) {
   revalidatePath(`/admin/clinics/${clinicId}`);
@@ -95,7 +96,7 @@ export async function updateBranchAction(fd: FormData) {
       const facilities = i.facilities ? i.facilities.split(",").map((s) => s.trim()).filter(Boolean) : null;
       await tx.execute(sql`UPDATE branches SET name = ${i.name}, address_line1 = ${i.addressLine1}, address_line2 = ${i.addressLine2 ?? null}, locality_id = ${i.localityId}, city_id = ${loc.rows[0].city_id}, state_id = ${loc.rows[0].state_id},
         pin_code = ${i.pinCode}, latitude = ${lat}, longitude = ${lng}, geocode_source = CASE WHEN ${lat != null} THEN 'staff' ELSE geocode_source END, public_phone = ${i.publicPhone ?? null}, directions = ${i.directions ?? null},
-        facilities = ${facilities}::text[], working_hours = ${i.workingHours ? JSON.stringify(i.workingHours) : null}::jsonb WHERE id = ${i.branchId}`);
+        facilities = ${textArray(facilities)}, working_hours = ${i.workingHours ? JSON.stringify(i.workingHours) : null}::jsonb WHERE id = ${i.branchId}`);
       await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "branch.update", objectType: "branch", objectId: i.branchId, reason: i.reason, changedFields: { localityId: { from: before.rows[0].locality_id, to: i.localityId }, cityId: { from: before.rows[0].city_id, to: loc.rows[0].city_id } } }, tx);
     });
     revalidate(i.clinicId);

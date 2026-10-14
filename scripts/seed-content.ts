@@ -16,6 +16,7 @@ import { Pool } from "pg";
 import * as schema from "../src/db/schema";
 import { renderMarkdown } from "../src/lib/content/markdown";
 import { FIXTURES } from "./seed-content-data";
+import { textArray } from "../src/lib/sql";
 
 if (process.env.SEED_DEV_DATA !== "1") {
   console.log("[seed-content] SEED_DEV_DATA is not 1; skipping");
@@ -48,7 +49,7 @@ async function main() {
         primary_specialty_id, tags, faqs, sources, condition, news_category, correction, corrected_at, reading_minutes, noindex, published_at)
       VALUES (${f.kind}, ${f.slug}, ${f.title}, ${f.dek}, ${f.body}, 'published', ${f.authorName ?? null},
         ${f.reviewer?.name ?? null}, ${f.reviewer?.credential ?? null}, ${reviewed ? sql`now() - make_interval(days => ${daysAgo}::int)` : null},
-        ${specialtyId}, ${f.tags ?? []}::text[], ${JSON.stringify(f.faqs ?? [])}::jsonb, ${JSON.stringify(f.sources ?? [])}::jsonb,
+        ${specialtyId}, ${textArray(f.tags ?? [])}, ${JSON.stringify(f.faqs ?? [])}::jsonb, ${JSON.stringify(f.sources ?? [])}::jsonb,
         ${f.condition ? JSON.stringify(f.condition) : null}::jsonb, ${f.newsCategory ?? null},
         ${f.correction ?? null}, ${f.correction ? sql`now() - make_interval(days => ${Math.max(0, daysAgo - 1)}::int)` : null},
         ${rendered.readingMinutes}, false, now() - make_interval(days => ${daysAgo}::int))

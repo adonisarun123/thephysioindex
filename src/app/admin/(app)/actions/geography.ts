@@ -10,6 +10,7 @@ import { requireStaff } from "@/lib/auth/session";
 import { act, parseForm, requireRecent, zBool, zOpt, zOptInt, zReason, zReq, zUuid } from "@/lib/admin/forms";
 import { actorRole } from "@/lib/admin/practitioner-ops";
 import { normaliseAlias, slugify } from "@/lib/slug";
+import { textArray } from "@/lib/sql";
 
 function revalidateGeo() {
   revalidatePath("/admin/geography", "layout");
@@ -117,11 +118,11 @@ export async function upsertLocalityAction(fd: FormData) {
       if (i.localityId) {
         const before = await tx.execute<{ name: string; status: string }>(sql`SELECT name, status FROM localities WHERE id = ${i.localityId} AND city_id = ${i.cityId} FOR UPDATE`);
         if (!before.rows[0]) throw new ApiError("NOT_FOUND", "Locality not found");
-        await tx.execute(sql`UPDATE localities SET name = ${i.name}, status = ${i.status}::geo_status, latitude = ${lat}, longitude = ${lng}, pin_codes = ${pins}::text[], seo_intro = ${i.seoIntro ?? null} WHERE id = ${i.localityId}`);
+        await tx.execute(sql`UPDATE localities SET name = ${i.name}, status = ${i.status}::geo_status, latitude = ${lat}, longitude = ${lng}, pin_codes = ${textArray(pins)}, seo_intro = ${i.seoIntro ?? null} WHERE id = ${i.localityId}`);
         if (before.rows[0].name !== i.name) await tx.execute(sql`INSERT INTO geo_aliases (target_type, target_id, alias, alias_normalised, kind) VALUES ('locality', ${i.localityId}, ${before.rows[0].name}, ${normaliseAlias(before.rows[0].name)}, 'former_name') ON CONFLICT DO NOTHING`);
         await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "geo.locality.update", objectType: "locality", objectId: i.localityId, reason: i.reason, changedFields: { name: { from: before.rows[0].name, to: i.name }, status: { from: before.rows[0].status, to: i.status } } }, tx);
       } else {
-        const r = await tx.execute<{ id: string }>(sql`INSERT INTO localities (city_id, name, slug, status, latitude, longitude, pin_codes, seo_intro) VALUES (${i.cityId}, ${i.name}, ${slugify(i.name)}, ${i.status}::geo_status, ${lat}, ${lng}, ${pins}::text[], ${i.seoIntro ?? null}) RETURNING id`);
+        const r = await tx.execute<{ id: string }>(sql`INSERT INTO localities (city_id, name, slug, status, latitude, longitude, pin_codes, seo_intro) VALUES (${i.cityId}, ${i.name}, ${slugify(i.name)}, ${i.status}::geo_status, ${lat}, ${lng}, ${textArray(pins)}, ${i.seoIntro ?? null}) RETURNING id`);
         await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "geo.locality.create", objectType: "locality", objectId: r.rows[0].id, reason: i.reason, changedFields: { name: i.name } }, tx);
       }
     });

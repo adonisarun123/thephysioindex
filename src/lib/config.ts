@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
+import { textArray } from "./sql";
 
 /** Runtime read of platform_config (proposed SRS defaults are rows, not constants). */
 export async function getConfig<T>(key: string, fallback: T): Promise<T> {
@@ -9,7 +10,7 @@ export async function getConfig<T>(key: string, fallback: T): Promise<T> {
 
 export async function getConfigMap(keys: string[]): Promise<Record<string, unknown>> {
   if (keys.length === 0) return {};
-  const res = await db().execute<{ key: string; value: unknown }>(sql`SELECT key, value FROM platform_config WHERE key = ANY(${keys}::text[])`);
+  const res = await db().execute<{ key: string; value: unknown }>(sql`SELECT key, value FROM platform_config WHERE key = ANY(${textArray(keys)})`);
   return Object.fromEntries(res.rows.map((r) => [r.key, r.value]));
 }
 

@@ -12,6 +12,7 @@ import { renderMarkdown } from "./markdown";
 import { KIND_PATH } from "./public";
 import { CONTENT_EDITOR_ROLE, searchPractitionerOptions, type ContentStatus, type PractitionerOption } from "./admin";
 import { ArticleInput, INTENT, KIND, type ArticleInputT, type Intent, type Kind, formToArticleInput } from "./schemas";
+import { textArray } from "@/lib/sql";
 
 /**
  * Editorial server actions (SEO-04, IAM-01, Section 22). Every action
@@ -169,7 +170,7 @@ export async function editorAction(kind: Kind, articleId: string | null, _prev: 
             cover_alt, reading_minutes, noindex, published_at)
           VALUES (${kind}, ${values.slug}, ${values.title}, ${values.dek}, ${values.body_markdown}, ${nextStatus}, ${viewer.userId}, ${values.author_name}, ${values.author_practitioner_id},
             ${values.reviewer_name}, ${values.reviewer_credential}, ${intent === "publish" && reviewerComplete(input) ? sql`now()` : null}, ${intent === "publish" && reviewerComplete(input) ? viewer.userId : null},
-            ${values.primary_specialty_id}, ${values.tags}::text[], ${values.faqs}::jsonb, ${values.sources}::jsonb, ${values.condition}::jsonb, ${values.news_category},
+            ${values.primary_specialty_id}, ${textArray(values.tags)}, ${values.faqs}::jsonb, ${values.sources}::jsonb, ${values.condition}::jsonb, ${values.news_category},
             ${values.cover_alt}, ${values.reading_minutes}, ${values.noindex}, ${intent === "publish" ? sql`now()` : null})
           RETURNING id
         `);
@@ -181,7 +182,7 @@ export async function editorAction(kind: Kind, articleId: string | null, _prev: 
             slug = ${values.slug}, title = ${values.title}, dek = ${values.dek}, body_markdown = ${values.body_markdown}, status = ${nextStatus},
             author_name = ${values.author_name}, author_practitioner_id = ${values.author_practitioner_id},
             reviewer_name = ${values.reviewer_name}, reviewer_credential = ${values.reviewer_credential},
-            primary_specialty_id = ${values.primary_specialty_id}, tags = ${values.tags}::text[], faqs = ${values.faqs}::jsonb, sources = ${values.sources}::jsonb,
+            primary_specialty_id = ${values.primary_specialty_id}, tags = ${textArray(values.tags)}, faqs = ${values.faqs}::jsonb, sources = ${values.sources}::jsonb,
             condition = ${values.condition}::jsonb, news_category = ${values.news_category}, cover_alt = ${values.cover_alt},
             reading_minutes = ${values.reading_minutes}, noindex = ${values.noindex}, updated_at = now()
             ${extra.length ? sql`, ${sql.join(extra, sql`, `)}` : sql``}

@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { hasRole, type Viewer } from "@/lib/auth/session";
 import { slugify, normaliseAlias } from "@/lib/slug";
+import { textArray } from "@/lib/sql";
 import {
   actorRole,
   emitOutbox,
@@ -316,7 +317,7 @@ async function decideLocality(tx: Db, v: Viewer, c: CaseRow, input: DecisionInpu
       const existing = await tx.execute<{ id: string }>(sql`SELECT id FROM localities WHERE city_id = ${lp.city_id} AND slug = ${slug}`);
       if (existing.rows[0]) localityId = existing.rows[0].id;
       else {
-        const ins = await tx.execute<{ id: string }>(sql`INSERT INTO localities (city_id, name, slug, status, pin_codes) VALUES (${lp.city_id}, ${lp.proposed_name}, ${slug}, 'active', ${lp.proposed_pin_code ? [lp.proposed_pin_code] : null}::text[]) RETURNING id`);
+        const ins = await tx.execute<{ id: string }>(sql`INSERT INTO localities (city_id, name, slug, status, pin_codes) VALUES (${lp.city_id}, ${lp.proposed_name}, ${slug}, 'active', ${textArray(lp.proposed_pin_code ? [lp.proposed_pin_code] : [])}) RETURNING id`);
         localityId = ins.rows[0].id;
         created = true;
       }

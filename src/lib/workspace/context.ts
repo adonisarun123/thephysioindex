@@ -4,6 +4,7 @@ import { cache } from "react";
 import { db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { canManagePractitioner, getViewer, type Viewer } from "@/lib/auth/session";
+import { uuidArray } from "@/lib/sql";
 
 /**
  * Workspace context (Section 15, IAM-01). The practitioner a viewer works on
@@ -69,7 +70,7 @@ export const resolveWorkspacePractitioner = cache(async (viewer: Viewer): Promis
   if (owned.rows[0]) return toPractitioner(owned.rows[0], viewer.userId);
   const scoped = viewer.grants.filter((g) => g.scopeType === "practitioner" && g.scopeId && ["clinic_coordinator", "clinic_manager", "clinic_owner"].includes(g.role)).map((g) => g.scopeId!);
   if (scoped.length === 0) return null;
-  const granted = await db().execute<Row>(sql`SELECT ${COLUMNS} FROM practitioners WHERE id = ANY(${scoped}::uuid[]) ORDER BY created_at LIMIT 1`);
+  const granted = await db().execute<Row>(sql`SELECT ${COLUMNS} FROM practitioners WHERE id = ANY(${uuidArray(scoped)}) ORDER BY created_at LIMIT 1`);
   return granted.rows[0] ? toPractitioner(granted.rows[0], viewer.userId) : null;
 });
 

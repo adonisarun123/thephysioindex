@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type Db } from "@/db/client";
+import { enumArray } from "@/lib/sql";
 
 /** Review queue entries (ADM-02). One open case per (type, subject) at a time. */
 
@@ -38,7 +39,7 @@ export async function latestCase(practitionerId: string, caseTypes: CaseType[]):
   const res = await db().execute<Record<string, unknown>>(sql`
     SELECT id, case_type::text AS case_type, state::text AS state, decision::text AS decision, decision_reason, submitted_at, decided_at
     FROM verification_cases
-    WHERE practitioner_id = ${practitionerId} AND case_type = ANY(${caseTypes}::case_type[])
+    WHERE practitioner_id = ${practitionerId} AND case_type = ANY(${enumArray(caseTypes, "case_type")})
     ORDER BY submitted_at DESC LIMIT 1`);
   const r = res.rows[0];
   if (!r) return null;

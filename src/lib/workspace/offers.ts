@@ -4,6 +4,7 @@ import { db, withTransaction } from "@/db/client";
 import { audit } from "@/lib/audit";
 import { ApiError } from "@/lib/api";
 import { openCase } from "./cases";
+import { uuidArray } from "@/lib/sql";
 
 /** Practitioner offers (OFR-03, OFR-06). Drafts → submitted → moderation; pause/resume for approved or active offers. */
 
@@ -35,7 +36,7 @@ export type OfferInput = z.infer<typeof OfferInputSchema>;
 export async function createOfferDraft(practitionerId: string, actorUserId: string, input: OfferInput): Promise<string> {
   return withTransaction(async (_c, tx) => {
     if (input.eligibleOfferingIds?.length) {
-      const own = await tx.execute<{ n: string | number }>(sql`SELECT count(*) AS n FROM offerings WHERE practitioner_id = ${practitionerId} AND id = ANY(${input.eligibleOfferingIds}::uuid[])`);
+      const own = await tx.execute<{ n: string | number }>(sql`SELECT count(*) AS n FROM offerings WHERE practitioner_id = ${practitionerId} AND id = ANY(${uuidArray(input.eligibleOfferingIds)})`);
       if (Number(own.rows[0]?.n) !== input.eligibleOfferingIds.length) throw new ApiError("INVALID_INPUT", "Eligible services must be your own offerings");
     }
     const offer = await tx.execute<{ id: string }>(sql`
@@ -45,7 +46,7 @@ export async function createOfferDraft(practitionerId: string, actorUserId: stri
     const v = await tx.execute<{ id: string }>(sql`
       INSERT INTO offer_versions (offer_id, version, type, value, starts_at, ends_at, eligible_offering_ids, min_spend_paise, max_discount_paise, total_cap, per_patient_cap, first_visit_only, automatic, terms, regular_price_confirmed)
       VALUES (${offerId}, 1, ${input.type}::offer_type, ${input.value}, ${input.startsAt.toISOString()}::timestamptz, ${input.endsAt.toISOString()}::timestamptz,
-        ${input.eligibleOfferingIds?.length ? input.eligibleOfferingIds : null}::uuid[], ${input.minSpendPaise}, ${input.maxDiscountPaise ?? null}, ${input.totalCap ?? null},
+        ${input.eligibleOfferingIds?.length ? uuidArray(input.eligibleOfferingIds) : sql`NULL::uuid[]`}, ${input.minSpendPaise}, ${input.maxDiscountPaise ?? null}, ${input.totalCap ?? null},
         ${input.firstVisitOnly ? 1 : input.perPatientCap}, ${input.firstVisitOnly}, ${input.automatic}, ${input.terms}, true) RETURNING id`);
     await tx.execute(sql`UPDATE offers SET current_version_id = ${v.rows[0].id} WHERE id = ${offerId}`);
     await audit({ actorUserId, action: "offer.create", objectType: "offer", objectId: offerId, changedFields: { type: input.type, value: input.value } }, tx);

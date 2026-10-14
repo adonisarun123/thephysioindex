@@ -4,6 +4,7 @@ import { db, withTransaction, type Db } from "@/db/client";
 import { audit } from "@/lib/audit";
 import { ApiError } from "@/lib/api";
 import { openCase } from "./cases";
+import { textArray } from "@/lib/sql";
 
 /**
  * Profile draft model (PRO-08, PRO-10).
@@ -98,13 +99,13 @@ export async function saveDraftSection(
     const changed = Array.from(new Set([...(latest?.state === "draft" ? await changedFieldsOf(tx, latest.id) : []), section]));
     let out: DraftVersion;
     if (latest && latest.state === "draft") {
-      await tx.execute(sql`UPDATE profile_versions SET structured_content = ${JSON.stringify(merged)}::jsonb, changed_fields = ${changed}::text[] WHERE id = ${latest.id}`);
+      await tx.execute(sql`UPDATE profile_versions SET structured_content = ${JSON.stringify(merged)}::jsonb, changed_fields = ${textArray(changed)} WHERE id = ${latest.id}`);
       out = { ...latest, content: merged };
     } else {
       const version = (latest?.version ?? 0) + 1;
       const res = await tx.execute<{ id: string }>(sql`
         INSERT INTO profile_versions (practitioner_id, version, state, structured_content, changed_fields, created_by_user_id)
-        VALUES (${practitionerId}, ${version}, 'draft', ${JSON.stringify(merged)}::jsonb, ${[section]}::text[], ${actorUserId}) RETURNING id`);
+        VALUES (${practitionerId}, ${version}, 'draft', ${JSON.stringify(merged)}::jsonb, ${textArray([section])}, ${actorUserId}) RETURNING id`);
       out = { id: res.rows[0].id, version, state: "draft", content: merged, submittedAt: null, decisionReason: null };
     }
     // Identity fields are mirrored on the practitioner row only while the listing is not yet published;

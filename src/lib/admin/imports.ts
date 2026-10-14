@@ -3,6 +3,7 @@ import { db, type Db } from "@/db/client";
 import { normaliseAlias, normaliseRegistrationNumber, slugify } from "@/lib/slug";
 import { newPublicId } from "@/lib/public-id";
 import { openCase } from "./cases";
+import { uuidArray } from "@/lib/sql";
 
 /**
  * Bulk onboarding (ADM-06, PRO-07). Rows are validated against master data,
@@ -238,9 +239,9 @@ export async function revertBatch(tx: Db, batchId: string, actorUserId: string, 
   if (b.rows[0].state !== "published") throw new Error("Only a published batch can be reverted");
   const created = b.rows[0].summary?.created ?? {};
   const pr = await tx.execute(sql`UPDATE practitioners SET listing_status = 'archived', booking_eligible = false WHERE import_batch_id = ${batchId} AND claim_state = 'unclaimed'`);
-  await tx.execute(sql`UPDATE verification_cases SET state = 'closed', decision = 'dismissed', decision_reason = ${"import batch reverted: " + reason}, decided_at = now(), decided_by_user_id = ${actorUserId} WHERE id = ANY(${created.caseIds ?? []}::uuid[]) AND state IN ('open','in_review','awaiting_evidence')`);
-  const br = await tx.execute(sql`UPDATE branches SET status = 'archived' WHERE id = ANY(${created.branchIds ?? []}::uuid[]) AND NOT EXISTS (SELECT 1 FROM practitioner_branches pb JOIN practitioners p ON p.id = pb.practitioner_id WHERE pb.branch_id = branches.id AND p.listing_status <> 'archived')`);
-  const cl = await tx.execute(sql`UPDATE clinics SET status = 'archived' WHERE id = ANY(${created.clinicIds ?? []}::uuid[]) AND NOT EXISTS (SELECT 1 FROM branches b WHERE b.clinic_id = clinics.id AND b.status <> 'archived')`);
+  await tx.execute(sql`UPDATE verification_cases SET state = 'closed', decision = 'dismissed', decision_reason = ${"import batch reverted: " + reason}, decided_at = now(), decided_by_user_id = ${actorUserId} WHERE id = ANY(${uuidArray(created.caseIds)}) AND state IN ('open','in_review','awaiting_evidence')`);
+  const br = await tx.execute(sql`UPDATE branches SET status = 'archived' WHERE id = ANY(${uuidArray(created.branchIds)}) AND NOT EXISTS (SELECT 1 FROM practitioner_branches pb JOIN practitioners p ON p.id = pb.practitioner_id WHERE pb.branch_id = branches.id AND p.listing_status <> 'archived')`);
+  const cl = await tx.execute(sql`UPDATE clinics SET status = 'archived' WHERE id = ANY(${uuidArray(created.clinicIds)}) AND NOT EXISTS (SELECT 1 FROM branches b WHERE b.clinic_id = clinics.id AND b.status <> 'archived')`);
   await tx.execute(sql`UPDATE import_rows SET state = 'skipped' WHERE batch_id = ${batchId}`);
   await tx.execute(sql`UPDATE import_batches SET state = 'reverted', summary = coalesce(summary, '{}'::jsonb) || ${JSON.stringify({ revertedAt: new Date().toISOString(), revertReason: reason })}::jsonb WHERE id = ${batchId}`);
   return { practitioners: pr.rowCount ?? 0, branches: br.rowCount ?? 0, clinics: cl.rowCount ?? 0 };
