@@ -22,6 +22,10 @@ Source of truth for requirements: `docs/srs/The_Physio_Index_SRS.md` (SRS v1.0).
 - Commit messages: imperative, reference SRS IDs; end with the attribution lines the session supplies.
 
 ## Environment facts
-- Neon project `mute-dream-63602116`, branch `production`, region `aws-ap-southeast-1`, PG 18. Extensions enabled: `pg_trgm`, `btree_gist`.
-- Vercel team `arun-mahendrans-projects`, region `sin1`, build command `npm run build:vercel`.
+- Neon project `mute-dream-63602116`, region `aws-ap-southeast-1`, PG 18. Extensions enabled: `pg_trgm`, `btree_gist`.
+  - Branch `production` (br-broad-meadow-azdls973): Vercel production. Runtime role `tpi_runtime` (Neon-managed, member of `tpi_app`, no DDL); migrations as `neondb_owner`.
+  - Branch `dev` (br-square-haze-azgd43x3): Vercel preview deployments. `SEED_DEV_DATA=1` and `SHOW_TEST_ACCOUNTS=1` there only; `scripts/seed-dev.ts` refuses the production endpoint.
+- Vercel project `thephysioindex`, team `arun-mahendrans-projects`, functions in `sin1`, build command `npm run build:vercel` (migrate → seed → seed-dev → build). Builds run in iad1, so seeds must be bulk statements.
+- `*.vercel.app` hosts carry `x-robots-tag: noindex` from Vercel; indexing starts only once www.thephysioindex.com is attached.
+- Git flow: feature branch → preview deploy on the dev branch → verify → fast-forward `main`.
 - Cloud agent sessions cannot reach `*.neon.tech`; apply SQL through the Neon connector or let the Vercel build run migrations.

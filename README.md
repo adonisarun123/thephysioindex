@@ -63,8 +63,8 @@ npm run build
 
 ## Delivery milestones
 
-1. **Foundation (this commit):** scaffold, full schema + migrations, geography and master-data seed, SSR directory skeleton, `/api/v1/{health,locations,specialties}`.
-2. Public directory: practitioner cards, profile pages, JSON-LD, sitemaps.
+1. **Foundation — done:** scaffold, full schema + migrations, geography and master-data seed, SSR directory skeleton, `/api/v1/{health,locations,specialties}`.
+2. **Public directory — done:** search with filters and one-card-per-practitioner, profile and clinic pages, Person/Physiotherapy JSON-LD, segmented sitemaps, least-privilege runtime role, preview environment on a Neon dev branch with labelled test data.
 3. Auth (phone OTP), practitioner onboarding/claims, admin review queues.
 4. Booking engine: holds, idempotency, reschedule, outbox, AT-06 concurrency test.
 5. Notifications, reviews, analytics, operations runbooks.
