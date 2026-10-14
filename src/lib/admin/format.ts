@@ -36,10 +36,12 @@ export function isoDateShift(days: number, from = todayIst()): string {
 }
 
 /** Elapsed time as "3d 4h" / "5h 12m" / "8m". */
-export function fmtAge(from: Date | string | null | undefined, to: Date = new Date()): string {
+export function fmtAge(from: Date | string | null | undefined, to: Date | string | null | undefined = new Date()): string {
   const x = toDate(from);
   if (!x) return "—";
-  const mins = Math.max(0, Math.floor((to.getTime() - x.getTime()) / 60_000));
+  // `to` arrives as a string when it comes straight from a raw SQL row (decided_at etc.).
+  const end = toDate(to) ?? new Date();
+  const mins = Math.max(0, Math.floor((end.getTime() - x.getTime()) / 60_000));
   const days = Math.floor(mins / 1440);
   const hours = Math.floor((mins % 1440) / 60);
   const m = mins % 60;
