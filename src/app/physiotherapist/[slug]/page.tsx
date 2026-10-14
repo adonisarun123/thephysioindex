@@ -90,6 +90,17 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   const bookableOnline = (b: PublicProfile["branches"][number], o: PublicProfile["branches"][number]["offerings"][number]) =>
     p.bookable && b.bookable && o.mode === "clinic" && o.bookingMode === "instant";
 
+  // Cancellation summary comes from the same policy/config the engine enforces (BKG-15), never a hard-coded number.
+  const cutoffs = new Set(
+    p.branches.flatMap((b) => b.offerings.filter((o) => bookableOnline(b, o)).map((o) => o.cutoffHours)),
+  );
+  const cancellationLine =
+    cutoffs.size === 1 && [...cutoffs][0] != null
+      ? `Free cancellation up to ${formatHours([...cutoffs][0] as number)} before`
+      : cutoffs.size > 1
+        ? "Cancellation terms vary by service and are shown before you confirm"
+        : null;
+
   const sections = (
     [
       ["overview", "About", Boolean(p.about)],
@@ -478,7 +489,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
 
             {p.bookable ? (
               <ul className="mt-5 grid gap-2 text-sm">
-                {["Instant confirmation", "Free cancellation up to 12 hours before", "Pay at the clinic"].map((t) => (
+                {["Instant confirmation", cancellationLine, "Pay at the clinic"].filter((t): t is string => Boolean(t)).map((t) => (
                   <li key={t} className="flex items-center gap-2">
                     <CheckIcon className="h-4 w-4 text-success" /> {t}
                   </li>
@@ -537,6 +548,11 @@ function Fact({ icon, label, children }: { icon: React.ReactNode; label: string;
       </div>
     </div>
   );
+}
+
+function formatHours(h: number) {
+  if (h > 0 && h % 24 === 0) return `${h / 24} day${h === 24 ? "" : "s"}`;
+  return `${h} hour${h === 1 ? "" : "s"}`;
 }
 
 function credentialTone(status: string) {

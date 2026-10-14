@@ -20,8 +20,10 @@ export async function SiteHeader() {
           <Logo />
         </Link>
         <nav aria-label="Primary" className="flex items-center gap-1 text-sm font-medium sm:gap-2">
-          <Link href="/physiotherapists" className="rounded-[var(--r-ctl)] px-3 py-2 hover:bg-surface-2">
-            Find a physiotherapist
+          <Link href="/physiotherapists" className="whitespace-nowrap rounded-[var(--r-ctl)] px-3 py-2 hover:bg-surface-2">
+            {/* Short label on phones so the header stays on one line (§6.1) */}
+            <span className="sm:hidden" aria-hidden>Find a physio</span>
+            <span className="sr-only sm:not-sr-only">Find a physiotherapist</span>
           </Link>
           <Link href="/for-physiotherapists" className="hidden rounded-[var(--r-ctl)] px-3 py-2 hover:bg-surface-2 md:inline-block">
             For physiotherapists
@@ -30,11 +32,11 @@ export async function SiteHeader() {
             Help
           </Link>
           {accountHref ? (
-            <Link href={accountHref} className="btn btn-secondary btn-sm">
+            <Link href={accountHref} className="btn btn-secondary btn-sm whitespace-nowrap">
               {accountLabel}
             </Link>
           ) : (
-            <Link href="/sign-in" className="btn btn-secondary btn-sm">
+            <Link href="/sign-in" className="btn btn-secondary btn-sm whitespace-nowrap">
               Sign in
             </Link>
           )}

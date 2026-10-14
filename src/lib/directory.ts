@@ -357,6 +357,8 @@ export type PublicProfile = {
       extraChargesPaise: number;
       priceNote: string | null;
       bookingMode: string;
+      /** Hours before the appointment until which the patient can cancel/reschedule online; null if no rule is configured. */
+      cutoffHours: number | null;
     }[];
   }[];
   reviews: { rating: number; text: string | null; displayName: string; publishedAt: string; reply: string | null }[];
@@ -399,7 +401,14 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
           'offerings', (SELECT coalesce(json_agg(json_build_object(
               'id', o.id, 'displayName', o.display_name, 'mode', o.mode, 'serviceLabel', sv.label, 'serviceKind', sv.kind,
               'durationMin', ov.duration_min, 'basePricePaise', ov.base_price_paise, 'taxPaise', ov.tax_paise,
-              'extraChargesPaise', ov.extra_charges_paise, 'priceNote', ov.price_note, 'bookingMode', ov.booking_mode
+              'extraChargesPaise', ov.extra_charges_paise, 'priceNote', ov.price_note, 'bookingMode', ov.booking_mode,
+              -- Same resolution as the booking engine (slots.ts): offering policy → default cancellation policy → platform_config (BKG-15)
+              'cutoffHours', coalesce(
+                (SELECT (pol.content ->> 'selfServiceCutoffHours')::int FROM policies pol
+                  WHERE (ov.cancellation_policy_id IS NOT NULL AND pol.id = ov.cancellation_policy_id)
+                     OR (ov.cancellation_policy_id IS NULL AND pol.type = 'cancellation' AND pol.key = 'default' AND pol.superseded_at IS NULL)
+                  ORDER BY pol.effective_at DESC LIMIT 1),
+                (SELECT (pc.value #>> '{}')::int FROM platform_config pc WHERE pc.key = 'booking.self_service_cutoff_hours'))
             ) ORDER BY sv.sort_order, ov.base_price_paise), '[]'::json)
             FROM offerings o JOIN offering_versions ov ON ov.id = o.current_version_id JOIN services sv ON sv.id = o.service_id
             WHERE o.practitioner_branch_id = pb.id AND o.active)
