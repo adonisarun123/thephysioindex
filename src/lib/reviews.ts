@@ -224,7 +224,7 @@ export async function listPractitionerReviews(practitionerId: string): Promise<P
     rating: Number(r.rating),
     text: r.text,
     displayName: r.display_name,
-    publishedAt: r.published_at,
+    publishedAt: new Date(r.published_at),
     reply: r.reply_text ? { text: r.reply_text, state: r.reply_state ?? "pending", moderationReason: r.reply_reason, version: Number(r.reply_version) } : null,
   }));
 }
