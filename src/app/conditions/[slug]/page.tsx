@@ -105,6 +105,8 @@ async function Condition({ params }: { params: PageProps<"/conditions/[slug]">["
             <p className="font-semibold">Need hands-on help?</p>
             <p className="mt-1 text-muted">Compare qualifications, registrations and fees before you book.</p>
             <Link href={findHref} className="btn btn-secondary mt-3 w-full py-2">Find a physiotherapist</Link>
+            {/* LOC-04, BKG-06: home visits are enquiry-only in R1, so offer that path explicitly. */}
+            <Link href="/physiotherapists?specialty=home-based-rehabilitation" className="btn btn-quiet btn-sm mt-2 w-full">Prefer a home visit?</Link>
           </div>
         </aside>
       </div>
