@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { countPublishedPractitioners } from "@/lib/directory";
 import { SITEMAP_PRACTITIONER_CHUNK, sitemapIndexXml } from "@/lib/sitemap";
 
-/** Segmented sitemap index (SEO-01): static pages, indexable locations, clinics, practitioner chunks. */
+/** Segmented sitemap index (SEO-01): static pages, indexable locations, clinics, editorial content, practitioner chunks. */
 export async function GET() {
   await connection();
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
@@ -12,6 +12,7 @@ export async function GET() {
     { loc: `${base}/sitemaps/static.xml` },
     { loc: `${base}/sitemaps/locations.xml` },
     { loc: `${base}/sitemaps/clinics.xml` },
+    { loc: `${base}/sitemaps/content.xml` },
     ...Array.from({ length: chunks }, (_, i) => ({ loc: `${base}/sitemaps/practitioners-${i + 1}.xml` })),
   ];
   return new Response(sitemapIndexXml(urls), {
