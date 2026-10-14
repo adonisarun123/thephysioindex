@@ -1,3 +1,5 @@
+import { isPermanentStatus, SendError } from "./core";
+
 /** Email provider adapter: Resend when configured, console otherwise (API-01). */
 export interface EmailProvider {
   send(to: string, subject: string, text: string, html?: string): Promise<{ providerRef?: string }>;
@@ -25,7 +27,7 @@ class ResendEmail implements EmailProvider {
         body: JSON.stringify({ from: this.from, to: [to], subject, text, html }),
         signal: ctrl.signal,
       });
-      if (!res.ok) throw new Error(`resend failed: ${res.status}`);
+      if (!res.ok) throw new SendError(`resend failed: ${res.status}`, isPermanentStatus(res.status), res.status);
       const data = (await res.json().catch(() => ({}))) as { id?: string };
       return { providerRef: data.id };
     } finally {

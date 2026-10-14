@@ -11,8 +11,27 @@ import { requireStaff } from "@/lib/auth/session";
 import { act, parseForm, zOpt, zReq, zUuid } from "@/lib/admin/forms";
 import { SUPPORT_CATEGORIES } from "@/lib/admin/ops";
 import { actorRole } from "@/lib/admin/practitioner-ops";
+import { kickDispatch } from "@/lib/messaging/kick";
 
 const ref = customAlphabet("23456789ABCDEFGHJKMNPQRSTUVWXYZ", 6);
+
+/** Put a failed or dead delivery back in the queue (MSG-01). A reminder still rechecks the booking before it goes out. */
+export async function retryDeliveryAction(fd: FormData) {
+  const v = await requireStaff("support_agent");
+  const { deliveryId, returnTo } = parseForm(z.object({ deliveryId: zUuid, returnTo: zOpt(300) }), fd);
+  await act(returnTo?.startsWith("/admin") ? returnTo : "/admin/notifications", async () => {
+    await withTransaction(async (_c, tx) => {
+      const res = await tx.execute<{ state: string }>(sql`
+        UPDATE notification_deliveries SET state = 'queued', attempts = 0, scheduled_for = now(), updated_at = now()
+        WHERE id = ${deliveryId} AND state IN ('failed', 'dead') RETURNING state`);
+      if (!res.rows[0]) throw new ApiError("CONFLICT", "Only failed or dead messages can be retried");
+      await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "notification.retry", objectType: "notification_delivery", objectId: deliveryId }, tx);
+    });
+    kickDispatch();
+    revalidatePath("/admin", "layout");
+    return { notice: "Message queued; it will send within a minute" };
+  });
+}
 
 /** Enquiries are not bookings (Section 2); status moves new → forwarded → contacted → closed. */
 export async function enquiryStatusAction(fd: FormData) {

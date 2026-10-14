@@ -13,6 +13,7 @@ export async function queueCounts(): Promise<QueueCounts> {
     UNION ALL SELECT 'content_blog', count(*) FROM content_articles WHERE kind = 'blog' AND status = 'in_review'
     UNION ALL SELECT 'content_condition', count(*) FROM content_articles WHERE kind = 'condition' AND status = 'in_review'
     UNION ALL SELECT 'content_news', count(*) FROM content_articles WHERE kind = 'news' AND status = 'in_review'
+    UNION ALL SELECT 'notifications_dead', count(*) FROM notification_deliveries WHERE state = 'dead'
     UNION ALL SELECT 'bookings_today', count(*) FROM bookings WHERE status = 'confirmed' AND (starts_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date
   `);
   return Object.fromEntries(res.rows.map((r) => [r.key, Number(r.n)]));

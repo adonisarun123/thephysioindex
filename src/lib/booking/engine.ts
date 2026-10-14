@@ -5,6 +5,7 @@ import type { LineItem } from "@/db/schema/scheduling";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { getConfigMap } from "@/lib/config";
+import { kickDispatch } from "@/lib/messaging/kick";
 import { assertPatientAuthority } from "./patients";
 import { loadOffers, priceLines, selectOffer, type OfferTerms, type Quote } from "./quote";
 import { buildSlots, loadOfferingContext, loadScheduleInputs, occupiedInterval, unbookableReason, UNBOOKABLE_MESSAGES, type OfferingContext, type Slot } from "./slots";
@@ -186,6 +187,7 @@ async function insertOutbox(tx: Db, e: { aggregateType: string; aggregateId: str
   await tx.execute(sql`
     INSERT INTO outbox_events (aggregate_type, aggregate_id, aggregate_version, event_type, payload, correlation_id)
     VALUES (${e.aggregateType}, ${e.aggregateId}::uuid, ${e.version}, ${e.type}, ${JSON.stringify(e.payload)}::jsonb, ${e.correlationId ?? null})`);
+  kickDispatch(); // sends after the response, once this transaction has committed (MSG-01)
 }
 
 async function bookingEvent(tx: Db, e: { bookingId: string; type: string; actor: Actor; from?: string | null; to?: string | null; reason?: string | null; payload?: Record<string, unknown> }) {

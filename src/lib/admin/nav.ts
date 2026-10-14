@@ -61,6 +61,7 @@ export function adminNav(c: QueueCounts): NavGroup[] {
     {
       label: "System",
       items: [
+        { href: "/admin/notifications", label: "Notifications", count: c.notifications_dead },
         { href: "/admin/analytics", label: "Analytics" },
         { href: "/admin/audit", label: "Audit log" },
         { href: "/admin/staff", label: "Staff and roles", superOnly: true },
