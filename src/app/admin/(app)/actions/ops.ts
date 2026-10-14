@@ -30,6 +30,25 @@ export async function enquiryStatusAction(fd: FormData) {
   });
 }
 
+/** Sign-up lead status (paid landing page). Notes are internal to operations. */
+export async function signupStatusAction(fd: FormData) {
+  const v = await requireStaff("support_agent");
+  const { signupId, status, notes, returnTo } = parseForm(
+    z.object({ signupId: zUuid, status: z.enum(["new", "contacted", "onboarding", "onboarded", "not_eligible", "closed"]), notes: zOpt(1000), returnTo: zOpt(300) }),
+    fd,
+  );
+  await act(returnTo?.startsWith("/admin") ? returnTo : "/admin/signups", async () => {
+    await withTransaction(async (_c, tx) => {
+      const before = await tx.execute<{ status: string }>(sql`SELECT status FROM practitioner_signups WHERE id = ${signupId} FOR UPDATE`);
+      if (!before.rows[0]) throw new ApiError("NOT_FOUND", "Sign-up not found");
+      await tx.execute(sql`UPDATE practitioner_signups SET status = ${status}, notes = coalesce(${notes ?? null}, notes) WHERE id = ${signupId}`);
+      await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "practitioner_signup.status", objectType: "practitioner_signup", objectId: signupId, changedFields: { from: before.rows[0].status, to: status } }, tx);
+    });
+    revalidatePath("/admin", "layout");
+    return { notice: `Sign-up marked ${status.replace("_", " ")}` };
+  });
+}
+
 const createSupportSchema = z.object({
   category: z.enum(SUPPORT_CATEGORIES as [string, ...string[]]),
   priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),

@@ -22,6 +22,24 @@ export async function listEnquiries(f: { status?: string; page?: number; pageSiz
   return { rows: rows.rows, total: Number(total.rows[0]?.n ?? 0), counts: Object.fromEntries(counts.rows.map((r) => [r.status, Number(r.n)])) };
 }
 
+export type SignupRow = { id: string; reference: string; fullName: string; mobile: string; email: string | null; city: string; practiceType: string; registrationNumber: string | null; attribution: Record<string, string>; status: string; notes: string | null; createdAt: Date };
+
+/** Practitioner sign-up leads from the paid landing page. Not listings (DIR-14). */
+export async function listSignups(f: { status?: string; page?: number; pageSize?: number }): Promise<{ rows: SignupRow[]; total: number; counts: Record<string, number> }> {
+  const whereSql = f.status ? sql`WHERE s.status = ${f.status}` : sql``;
+  const pageSize = f.pageSize ?? 50;
+  const page = Math.max(1, f.page ?? 1);
+  const [rows, total, counts] = await Promise.all([
+    db().execute<SignupRow>(sql`
+      SELECT s.id, s.reference, s.full_name AS "fullName", s.mobile, s.email, s.city, s.practice_type AS "practiceType", s.registration_number AS "registrationNumber",
+        s.attribution, s.status, s.notes, s.created_at AS "createdAt"
+      FROM practitioner_signups s ${whereSql} ORDER BY s.created_at DESC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`),
+    db().execute<{ n: string }>(sql`SELECT count(*) AS n FROM practitioner_signups s ${whereSql}`),
+    db().execute<{ status: string; n: string }>(sql`SELECT status, count(*) AS n FROM practitioner_signups GROUP BY 1`),
+  ]);
+  return { rows: rows.rows, total: Number(total.rows[0]?.n ?? 0), counts: Object.fromEntries(counts.rows.map((r) => [r.status, Number(r.n)])) };
+}
+
 export type SupportRow = { id: string; reference: string; category: string; priority: string; state: string; requesterContact: string | null; requesterName: string | null; linkedType: string | null; linkedId: string | null; linkedLabel: string | null; assigneeName: string | null; assigneeUserId: string | null; description: string; resolution: string | null; resolvedAt: Date | null; createdAt: Date; updatedAt: Date };
 
 const SUPPORT_SELECT = sql`
