@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { connection } from "next/server";
@@ -15,6 +16,8 @@ const METROS = [
   ["Kolkata", "/physiotherapists/west-bengal/kolkata"],
   ["Ahmedabad", "/physiotherapists/gujarat/ahmedabad"],
 ] as const;
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function Home() {
   return (

@@ -3,7 +3,7 @@ import { listIndexableLocationPaths, listPublishedClinicPaths, listPublishedPrac
 import { SITEMAP_PRACTITIONER_CHUNK, urlsetXml } from "@/lib/sitemap";
 import { CONTENT_KINDS, HUB_INDEX_THRESHOLD, KIND_PATH, countPublished, listPublishedContentPaths } from "@/lib/content/public";
 
-const STATIC = ["/", "/physiotherapists", "/for-physiotherapists", "/help", "/policies/privacy", "/policies/terms", "/policies/cancellation"];
+const STATIC = ["/", "/physiotherapists", "/for-physiotherapists", "/help", "/policies/privacy", "/policies/terms", "/policies/cancellation", "/policies/provider-terms"];
 
 export async function GET(_req: Request, ctx: RouteContext<"/sitemaps/[name]">) {
   await connection();
