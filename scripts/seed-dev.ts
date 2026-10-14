@@ -163,9 +163,20 @@ async function main() {
     throw new Error("[seed-dev] refusing to seed test data into the production branch");
   }
 
-  // Wipe previous test data in dependency order (test rows only).
+  // Wipe previous test data in dependency order (test rows only). A test practitioner that
+  // real preview activity now references (bookings, cases, claims, calendars, reviews…) is
+  // kept as is and not re-seeded, so exercising those flows never breaks the next build.
+  const keepSql = sql`SELECT id FROM practitioners p WHERE is_test_account AND NOT EXISTS (SELECT 1 FROM bookings x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM reservations x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM calendar_resources x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM claim_requests x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM verification_cases x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM reviews x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM review_replies x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM enquiries x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM offers x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM resolution_tasks x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM media_assets x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM portfolio_items x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM practitioner_slug_history x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM import_rows x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM content_articles x WHERE x.author_practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM duplicate_candidates x WHERE x.practitioner_a_id = p.id OR x.practitioner_b_id = p.id)`;
   await db.execute(sql`
-    WITH tp AS (SELECT id FROM practitioners WHERE is_test_account),
+    WITH tp AS (${keepSql}),
          tb AS (SELECT b.id FROM branches b JOIN clinics c ON c.id = b.clinic_id WHERE c.name LIKE 'TEST %')
     , d1 AS (DELETE FROM offering_versions WHERE offering_id IN (SELECT id FROM offerings WHERE practitioner_id IN (SELECT id FROM tp)))
     , d2 AS (DELETE FROM offerings WHERE practitioner_id IN (SELECT id FROM tp))
@@ -176,10 +187,13 @@ async function main() {
     , d7 AS (DELETE FROM practitioner_specialties WHERE practitioner_id IN (SELECT id FROM tp))
     , d8 AS (DELETE FROM practitioner_languages WHERE practitioner_id IN (SELECT id FROM tp))
     , d9 AS (DELETE FROM profile_versions WHERE practitioner_id IN (SELECT id FROM tp))
-    , d10 AS (UPDATE practitioners SET published_version_id = NULL WHERE is_test_account)
+    , d10 AS (UPDATE practitioners SET published_version_id = NULL WHERE id IN (SELECT id FROM tp))
     SELECT 1
   `);
-  await db.execute(sql`DELETE FROM practitioners WHERE is_test_account`);
+  await db.execute(sql`DELETE FROM practitioners WHERE id IN (${keepSql})`);
+  const retained = await db.execute<{ display_name: string }>(sql`SELECT display_name FROM practitioners WHERE is_test_account`);
+  const retainedNames = new Set(retained.rows.map((r) => r.display_name));
+  if (retainedNames.size) console.log(`[seed-dev] keeping ${retainedNames.size} referenced test practitioner(s): ${[...retainedNames].join(", ")}`);
   // TEST clinics and branches are upserted by name, never deleted: real onboarding
   // flows on the preview may reference them (offerings, associations, bookings).
 
@@ -258,6 +272,7 @@ async function main() {
   // Practitioners
   let n = 0;
   for (const p of PRACTITIONERS) {
+    if (retainedNames.has(p.name)) continue;
     const publicId = newPublicId();
     const [pr] = await db
       .insert(schema.practitioners)
