@@ -29,7 +29,7 @@ export async function loadOverview(): Promise<Overview> {
              count(*) FILTER (WHERE booking_eligible AND NOT booking_paused) AS bookable
       FROM practitioners p WHERE listing_status = 'published' AND NOT is_test_account`),
     d.execute<{ caseType: string; submittedAt: Date; firstResponseAt: Date | null }>(sql`SELECT case_type::text AS "caseType", submitted_at AS "submittedAt", first_response_at AS "firstResponseAt" FROM verification_cases WHERE state IN ('open','in_review','awaiting_evidence')`),
-    d.execute<{ status: string; n: string }>(sql`SELECT status::text, count(*) AS n FROM bookings b JOIN patients pt ON pt.id = b.patient_id WHERE NOT pt.is_test_account AND (b.starts_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY 1`),
+    d.execute<{ status: string; n: string }>(sql`SELECT b.status::text, count(*) AS n FROM bookings b JOIN patients pt ON pt.id = b.patient_id WHERE NOT pt.is_test_account AND (b.starts_at AT TIME ZONE 'Asia/Kolkata')::date = (now() AT TIME ZONE 'Asia/Kolkata')::date GROUP BY 1`),
     d.execute<{ k: string; n: string }>(sql`
       SELECT 'publishedLast7' AS k, count(*) AS n FROM practitioners WHERE published_at >= now() - interval '7 days' AND NOT is_test_account
       UNION ALL SELECT 'publishedPrior7', count(*) FROM practitioners WHERE published_at >= now() - interval '14 days' AND published_at < now() - interval '7 days' AND NOT is_test_account
