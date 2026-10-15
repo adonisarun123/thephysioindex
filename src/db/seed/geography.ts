@@ -7,6 +7,10 @@
  * screens, new proposals through locality_proposals.
  */
 
+import { LOCALITIES_NORTH_CENTRAL } from "./localities/north-central";
+import { LOCALITIES_SOUTH } from "./localities/south";
+import { LOCALITIES_WEST_EAST } from "./localities/west-east";
+
 export type StateSeed = { code: string; name: string; kind: "state" | "union_territory"; aliases?: string[] };
 
 export const STATES: StateSeed[] = [
@@ -208,8 +212,8 @@ export const CITIES: CitySeed[] = [
   { state: "WB", name: "Kharagpur", tier: 3 },
 ];
 
-/** Localities per metro. "Name|alias|alias". */
-export const LOCALITIES: Record<string, string[]> = {
+/** Localities per city. "Name|alias|alias". Metros below; other cities in ./localities/*. */
+const METRO_LOCALITIES: Record<string, string[]> = {
   "KA/Bengaluru": [
     "Indiranagar|Indira Nagar", "Koramangala", "HSR Layout|HSR", "BTM Layout|BTM", "Jayanagar", "JP Nagar|J P Nagar",
     "Banashankari|BSK", "Basavanagudi", "Malleshwaram|Malleswaram", "Rajajinagar|Rajaji Nagar", "Sadashivanagar|Sadashiva Nagar",
@@ -357,4 +361,11 @@ export const LOCALITIES: Record<string, string[]> = {
     "Income Tax", "Vijay Cross Roads|Vijay Char Rasta", "Naranpura", "Ghatlodia|Ghatlodiya", "Nirnaynagar|Nirnay Nagar", "Hansol", "Krishnanagar", "Saijpur Bogha",
     "Kathwada", "Ramol", "Hathijan", "Vinzol", "Lambha", "Hansol Airport Road", "Zundal", "Tragad", "Vaishnodevi Circle", "Khoraj", "Jagatpur", "Chharodi", "Shilaj", "Hebatpur", "Manipur", "Sanand",
   ],
+};
+
+export const LOCALITIES: Record<string, string[]> = {
+  ...METRO_LOCALITIES,
+  ...LOCALITIES_NORTH_CENTRAL,
+  ...LOCALITIES_WEST_EAST,
+  ...LOCALITIES_SOUTH,
 };
