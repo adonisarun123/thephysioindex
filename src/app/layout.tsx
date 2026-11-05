@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Suspense } from "react";
 import { Logo } from "@/components/logo";
+import { GoogleTag } from "@/components/google-tag";
 import "./globals.css";
 
 
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Suspense fallback={null}>
           <SiteFooter />
         </Suspense>
+        <GoogleTag />
       </body>
     </html>
   );
