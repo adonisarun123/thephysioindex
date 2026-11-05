@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { EmailSignIn } from "@/components/auth/email-sign-in";
 import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 import { getViewer } from "@/lib/auth/session";
 
@@ -14,19 +16,33 @@ export default function Page({ searchParams }: PageProps<"/sign-in">) {
   );
 }
 
+/** SMS codes only reach phones once MSG91 is live; until then email is the default for practitioners. */
+const SMS_LIVE = process.env.SMS_PROVIDER === "msg91";
+
 async function SignIn({ searchParams }: { searchParams: PageProps<"/sign-in">["searchParams"] }) {
   const sp = await searchParams;
   const next = typeof sp.next === "string" && sp.next.startsWith("/") ? sp.next : "/account";
   const intent = sp.as === "practitioner" ? "practitioner" : "patient";
   const viewer = await getViewer();
   if (viewer) redirect(next);
+
+  const method = intent === "practitioner" && (sp.method === "email" || (sp.method !== "mobile" && !SMS_LIVE)) ? "email" : "mobile";
+  const switchHref = (m: "email" | "mobile") => `/sign-in?as=practitioner&method=${m}&next=${encodeURIComponent(next)}`;
+
   return (
     <div className="mx-auto max-w-md px-4 py-12">
       <h1 className="text-3xl font-bold">{intent === "practitioner" ? "Sign in to your practice workspace" : "Sign in or create your account"}</h1>
-      <p className="mt-2 text-muted">We send a one-time code to your mobile. No passwords.</p>
-      <div className="mt-6">
-        <PhoneSignIn next={next} intent={intent} />
-      </div>
+      <p className="mt-2 text-muted">{method === "email" ? "We email you a one-time code. No passwords." : "We send a one-time code to your mobile. No passwords."}</p>
+      {intent === "practitioner" ? (
+        <div className="mt-6 inline-flex rounded-[var(--r-ctl)] border border-line p-1 text-sm" role="tablist" aria-label="Sign-in method">
+          {(["email", "mobile"] as const).map((m) => (
+            <Link key={m} href={switchHref(m)} role="tab" aria-selected={method === m} className={`rounded-[var(--r-sm)] px-3 py-1.5 ${method === m ? "bg-brand-soft font-semibold" : "text-muted"}`}>
+              {m === "email" ? "Email" : "Mobile"}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+      <div className="mt-4">{method === "email" ? <EmailSignIn next={next} audience="practitioner" /> : <PhoneSignIn next={next} intent={intent} />}</div>
       <p className="mt-6 text-sm text-muted">
         {intent === "practitioner" ? <a href={`/sign-in?next=${encodeURIComponent(next)}`} className="underline">I am a patient</a> : <a href={`/sign-in?as=practitioner&next=${encodeURIComponent("/workspace")}`} className="underline">I am a physiotherapist</a>}
         {" · "}

@@ -16,8 +16,12 @@ import { normaliseIndianMobile, sms } from "@/lib/messaging/sms";
  * Authentication (IAM-06, IAM-07, SEC-02).
  *
  * - Patients and practitioners sign in with a mobile OTP (phone-number plugin).
+ *   Practitioners may also sign in or sign up with an email OTP, which is the
+ *   only working route until MSG91 DLT templates are approved.
  * - Staff sign in with an email OTP and must complete TOTP MFA (two-factor
- *   plugin); admin routes enforce the MFA requirement server-side.
+ *   plugin); admin routes enforce the MFA requirement server-side. Staff
+ *   access comes from role grants, never from having an account, so email
+ *   sign-up grants nothing (IAM-01, IAM-02).
  * - OTPs are single use, expire after platform_config otp.ttl_seconds (default
  *   300) and lock after otp.max_attempts (default 5). Error messages never
  *   disclose whether a number already has an account.
@@ -150,7 +154,10 @@ export const auth = betterAuth({
       otpLength: 6,
       expiresIn: OTP_TTL_SECONDS,
       allowedAttempts: OTP_MAX_ATTEMPTS,
-      disableSignUp: true, // staff accounts are created by an administrator (IAM-02)
+      // Sign-up allowed so practitioners can register by email. It creates a
+      // plain user (kind 'patient' until /api/v1/me/intent marks it practitioner);
+      // staff roles are still granted only by an administrator (IAM-02).
+      disableSignUp: false,
       sendVerificationOTP: async ({ email: to, otp, type }) => {
         const subject = type === "sign-in" ? "Your The Physio Index sign-in code" : "Your The Physio Index verification code";
         await email().send(to, subject, `Your code is ${otp}. It expires in ${Math.round(OTP_TTL_SECONDS / 60)} minutes. If you did not request this, ignore this email.`);
