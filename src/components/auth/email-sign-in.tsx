@@ -10,8 +10,8 @@ import { authClient } from "@/lib/auth/client";
  *   practitioner intent like the mobile flow does. A staff account using this
  *   form still gets the TOTP challenge (enforced server-side).
  */
-export function EmailSignIn({ next = "/admin", audience = "staff" }: { next?: string; audience?: "staff" | "practitioner" }) {
-  const [email, setEmail] = useState("");
+export function EmailSignIn({ next = "/admin", audience = "staff", initialEmail = "" }: { next?: string; audience?: "staff" | "practitioner"; initialEmail?: string }) {
+  const [email, setEmail] = useState(initialEmail);
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"email" | "otp">("email");
   const [busy, setBusy] = useState(false);
@@ -73,7 +73,7 @@ export function EmailSignIn({ next = "/admin", audience = "staff" }: { next?: st
       ) : null}
       {error ? <p role="alert" className="rounded-[var(--r-sm)] bg-alert-soft px-3 py-2 text-sm text-alert">{error}</p> : null}
       <button type="submit" className="btn btn-primary" disabled={busy}>
-        {busy ? "Please wait…" : step === "email" ? "Send code" : "Continue"}
+        {busy ? "Please wait…" : step === "email" ? (initialEmail ? "Email me a code" : "Send code") : "Continue"}
       </button>
       {step === "otp" ? (
         <div className="flex justify-between text-sm">

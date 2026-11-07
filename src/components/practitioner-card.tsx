@@ -33,7 +33,11 @@ export function PractitionerCardRow({ card }: { card: Card }) {
           {card.primarySpecialty ? ` — ${card.primarySpecialty}` : ""}
         </p>
         <p className="mt-2 text-sm">
-          <Link href={card.bestBranch.clinicPath} className="font-medium hover:underline">{card.bestBranch.clinicName}</Link>
+          {card.bestBranch.clinicPath ? (
+            <Link href={card.bestBranch.clinicPath} className="font-medium hover:underline">{card.bestBranch.clinicName}</Link>
+          ) : (
+            <span className="font-medium">{card.bestBranch.clinicName}</span>
+          )}
           <span className="text-muted">, {card.bestBranch.localityName}, {card.bestBranch.cityName}</span>
           {card.otherBranchCount > 0 ? (
             <span className="text-muted">

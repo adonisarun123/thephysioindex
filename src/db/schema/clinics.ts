@@ -70,12 +70,16 @@ export const branches = pgTable(
     directions: text("directions"),
     publicPhone: text("public_phone"),
     status: branchStatus("status").notNull().default("draft"),
+    // 'service_area': a home-visit/online practitioner's coverage (locality + PIN), not a
+    // walk-in address. Address and PIN stay private; no public clinic page.
+    kind: text("kind").notNull().default("clinic"),
     ...timestamps,
   },
   (t) => [
     index("branches_clinic_idx").on(t.clinicId),
     index("branches_locality_idx").on(t.localityId, t.status),
     index("branches_city_idx").on(t.cityId, t.status),
+    check("branches_kind_chk", sql`${t.kind} IN ('clinic', 'service_area')`),
     check("branches_pin_format", sql`${t.pinCode} ~ '^[1-9][0-9]{5}$'`),
     check("branches_lat_range", sql`${t.latitude} IS NULL OR ${t.latitude} BETWEEN -90 AND 90`),
     check("branches_lng_range", sql`${t.longitude} IS NULL OR ${t.longitude} BETWEEN -180 AND 180`),

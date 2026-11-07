@@ -51,7 +51,7 @@ export default function Page({ searchParams }: PageProps<"/for-physiotherapists/
           </div>
           <div id="register" className="card p-5 text-foreground sm:p-6">
             <h2 className="text-xl font-semibold tracking-tight">Register your interest</h2>
-            <p className="mt-1 text-sm text-muted">Takes under a minute. Our onboarding team calls you to set up your profile.</p>
+            <p className="mt-1 text-sm text-muted">Takes under a minute. Then build your profile straight away — or we call you to help.</p>
             <Suspense fallback={<SignupForm attribution={{}} />}>
               <FormWithParams searchParams={searchParams} />
             </Suspense>
@@ -63,9 +63,9 @@ export default function Page({ searchParams }: PageProps<"/for-physiotherapists/
         <h2 className="text-2xl font-semibold tracking-tight">How joining works</h2>
         <ol className="mt-6 grid gap-4 sm:grid-cols-3">
           {[
-            ["1. Register here", "Leave your name, mobile and city. No documents needed at this step."],
-            ["2. We call you", "Our team helps you create or claim your profile and checks your registration."],
-            ["3. Go live", "Once approved, your profile appears in city and locality searches and patients can book."],
+            ["1. Register here", "Name, mobile, email and city. No documents needed at this step."],
+            ["2. Build your profile", "Enter the code we email you and add your qualification, registration and where you see patients. About 5 minutes; our team can call to help."],
+            ["3. Go live", "Once we have checked your registration, your profile appears in city and locality searches."],
           ].map(([t, d]) => (
             <li key={t} className="card p-5">
               <p className="font-semibold">{t}</p>
@@ -140,8 +140,8 @@ function SignupForm({ attribution, error }: { attribution: Record<string, string
           <input id="city" name="city" className="input" required minLength={2} maxLength={80} autoComplete="address-level2" />
         </div>
         <div>
-          <label className="label" htmlFor="email">Email <span className="font-normal text-muted">(optional)</span></label>
-          <input id="email" name="email" type="email" className="input" maxLength={120} autoComplete="email" />
+          <label className="label" htmlFor="email">Email</label>
+          <input id="email" name="email" type="email" className="input" required maxLength={120} autoComplete="email" inputMode="email" placeholder="Your sign-in code goes here" />
         </div>
       </div>
       <div>

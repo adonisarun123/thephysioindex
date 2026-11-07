@@ -9,7 +9,7 @@ type Props = { states: Option[]; cities: Option[]; localities: Option[]; selecte
  * With JavaScript the next level loads in place; without it, the "Load"
  * button submits a GET round-trip (the server renders the lists).
  */
-export function PlaceCascade({ states, cities: initialCities, localities: initialLocalities, selected, reloadAction }: Props) {
+export function PlaceCascade({ states, cities: initialCities, localities: initialLocalities, selected, reloadAction, idPrefix = "" }: Props & { idPrefix?: string }) {
   const [stateId, setStateId] = useState(selected.stateId ?? "");
   const [cityId, setCityId] = useState(selected.cityId ?? "");
   const [cities, setCities] = useState<Option[]>(initialCities);
@@ -35,22 +35,22 @@ export function PlaceCascade({ states, cities: initialCities, localities: initia
   return (
     <>
       <div>
-        <label className="label" htmlFor="stateId">State</label>
-        <select id="stateId" name="stateId" className="input" required value={stateId} onChange={(e) => { const v = e.target.value; setStateId(v); setCityId(""); setLocalities([]); if (v) void load("cities", v); else setCities([]); }}>
+        <label className="label" htmlFor={`${idPrefix}stateId`}>State</label>
+        <select id={`${idPrefix}stateId`} name="stateId" className="input" required value={stateId} onChange={(e) => { const v = e.target.value; setStateId(v); setCityId(""); setLocalities([]); if (v) void load("cities", v); else setCities([]); }}>
           <option value="">Select…</option>
           {states.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
       </div>
       <div>
-        <label className="label" htmlFor="cityId">City</label>
-        <select id="cityId" name="cityId" className="input" required value={cityId} disabled={!stateId || loading === "cities"} onChange={(e) => { const v = e.target.value; setCityId(v); if (v) void load("localities", v); else setLocalities([]); }}>
+        <label className="label" htmlFor={`${idPrefix}cityId`}>City</label>
+        <select id={`${idPrefix}cityId`} name="cityId" className="input" required value={cityId} disabled={!stateId || loading === "cities"} onChange={(e) => { const v = e.target.value; setCityId(v); if (v) void load("localities", v); else setLocalities([]); }}>
           <option value="">{loading === "cities" ? "Loading…" : stateId ? "Select…" : "Choose a state first"}</option>
           {cities.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
       </div>
       <div>
-        <label className="label" htmlFor="localityId">Locality</label>
-        <select id="localityId" name="localityId" className="input" defaultValue="" disabled={!cityId || loading === "localities"}>
+        <label className="label" htmlFor={`${idPrefix}localityId`}>Locality</label>
+        <select id={`${idPrefix}localityId`} name="localityId" className="input" defaultValue="" disabled={!cityId || loading === "localities"}>
           <option value="">{loading === "localities" ? "Loading…" : cityId ? "Select…" : "Choose a city first"}</option>
           {localities.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
           <option value="__new">Propose a new locality…</option>
@@ -58,8 +58,8 @@ export function PlaceCascade({ states, cities: initialCities, localities: initia
         <p className="mt-1 text-xs text-muted">Not listed? Choose “Propose a new locality” and type its name; it goes to review (DIR-08).</p>
       </div>
       <div>
-        <label className="label" htmlFor="newLocalityName">New locality name (if proposing)</label>
-        <input id="newLocalityName" name="newLocalityName" className="input" maxLength={120} />
+        <label className="label" htmlFor={`${idPrefix}newLocalityName`}>New locality name (if proposing)</label>
+        <input id={`${idPrefix}newLocalityName`} name="newLocalityName" className="input" maxLength={120} />
       </div>
       <noscript>
         <div className="text-sm sm:col-span-2">

@@ -47,14 +47,18 @@ export async function createOffering(practitionerId: string, actorUserId: string
   const defaults = await offeringDefaults();
   assertWithinBounds(input, defaults);
   return withTransaction(async (_c, tx) => {
-    const pb = await tx.execute<{ id: string; branch_id: string }>(sql`SELECT id, branch_id FROM practitioner_branches WHERE id = ${associationId} AND practitioner_id = ${practitionerId} AND state IN ('pending', 'approved')`);
+    const pb = await tx.execute<{ id: string; branch_id: string; kind: string }>(sql`
+      SELECT pb.id, pb.branch_id, b.kind FROM practitioner_branches pb JOIN branches b ON b.id = pb.branch_id
+      WHERE pb.id = ${associationId} AND pb.practitioner_id = ${practitionerId} AND pb.state IN ('pending', 'approved')`);
     const a = pb.rows[0];
     if (!a) throw new ApiError("NOT_FOUND", "Clinic association not found");
-    const dup = await tx.execute<{ id: string }>(sql`SELECT id FROM offerings WHERE practitioner_branch_id = ${a.id} AND service_id = ${input.serviceId} AND mode = 'clinic'`);
-    if (dup.rows[0]) throw new ApiError("CONFLICT", "This service already exists at this clinic; edit it instead");
+    // A home-visit area has no walk-in address: its services are home visits, enquiry-only in R1 (LOC-04, BKG-06).
+    const mode = a.kind === "service_area" ? "home_visit" : "clinic";
+    const dup = await tx.execute<{ id: string }>(sql`SELECT id FROM offerings WHERE practitioner_branch_id = ${a.id} AND service_id = ${input.serviceId} AND mode = ${mode}::service_mode`);
+    if (dup.rows[0]) throw new ApiError("CONFLICT", "This service already exists here; edit it instead");
     const off = await tx.execute<{ id: string }>(sql`
       INSERT INTO offerings (practitioner_branch_id, practitioner_id, branch_id, service_id, mode, display_name, description, active)
-      VALUES (${a.id}, ${practitionerId}, ${a.branch_id}, ${input.serviceId}, 'clinic', ${input.displayName}, ${input.description || null}, true) RETURNING id`);
+      VALUES (${a.id}, ${practitionerId}, ${a.branch_id}, ${input.serviceId}, ${mode}::service_mode, ${input.displayName}, ${input.description || null}, true) RETURNING id`);
     const offeringId = off.rows[0].id;
     const versionId = await insertVersion(tx, offeringId, 1, input, actorUserId, defaults);
     await tx.execute(sql`UPDATE offerings SET current_version_id = ${versionId} WHERE id = ${offeringId}`);

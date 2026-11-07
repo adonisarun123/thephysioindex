@@ -127,20 +127,32 @@ async function changedFieldsOf(tx: Db, versionId: string): Promise<string[]> {
 }
 
 /** Mandatory fields for a submitted profile (PRO-03, PRO-08). Returns human-readable gaps. */
-export function validateForSubmission(content: ProfileDraft, extra: { credentialCount: number; branchCount: number; offeringCount: number; consents: boolean }): string[] {
+type SubmissionExtra = { credentialCount: number; branchCount: number; offeringCount: number; consents: boolean };
+
+/**
+ * Lean submission core (PRO-03, owner decision 7 Nov 2026): who you are, that
+ * you are registered, where patients find you, and consent. Everything else is
+ * recommended, not blocking — a submitted profile can be completed after approval.
+ */
+export function validateForSubmission(content: ProfileDraft, extra: SubmissionExtra): string[] {
   const gaps: string[] = [];
   const id = content.identity;
   if (!id || id.displayName.trim().length < 2) gaps.push("Name (2–120 characters)");
-  if (!id?.designation) gaps.push("Designation");
-  if (!content.about || content.about.trim().length < 100) gaps.push("About section (at least 100 characters)");
   if (!content.qualifications?.length) gaps.push("At least one qualification");
   if (extra.credentialCount === 0) gaps.push("At least one registration or enrolment credential");
-  if (!content.specialties?.some((s) => s.isPrimary)) gaps.push("A primary area of practice");
-  if (!content.languages?.length) gaps.push("At least one language");
-  if (extra.branchCount === 0) gaps.push("At least one clinic location");
-  if (extra.offeringCount === 0) gaps.push("At least one service with a fee");
+  if (extra.branchCount === 0) gaps.push("A clinic or a home-visit area");
   if (!extra.consents) gaps.push("Publication consent and provider terms");
   return gaps;
+}
+
+/** Profile completeness items that improve the listing but do not block submission. */
+export function recommendedAdditions(content: ProfileDraft, extra: SubmissionExtra): string[] {
+  const out: string[] = [];
+  if (extra.offeringCount === 0) out.push("A service with a fee");
+  if (!content.specialties?.some((s) => s.isPrimary)) out.push("A primary area of practice");
+  if (!content.languages?.length) out.push("Languages you consult in");
+  if (!content.about || content.about.trim().length < 100) out.push("An About section (at least 100 characters)");
+  return out;
 }
 
 /**

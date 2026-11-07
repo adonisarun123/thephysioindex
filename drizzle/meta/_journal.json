@@ -50,6 +50,13 @@
       "when": 1791971902267,
       "tag": "0006_practitioner_signups_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794058065815,
+      "tag": "0007_branch_kind_service_area",
+      "breakpoints": true
     }
   ]
 }

@@ -198,7 +198,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             </Section>
           ) : null}
 
-          <Section id="clinics" title="Clinics, services and fees">
+          <Section id="clinics" title={p.branches.every((b) => b.kind === "service_area") ? "Home visits, services and fees" : "Clinics, services and fees"}>
             {p.branches.length === 0 ? (
               <p className="text-muted">No approved clinic location yet.</p>
             ) : (
@@ -208,13 +208,15 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                     <div className="flex flex-wrap items-start justify-between gap-4 bg-surface-2 p-4 md:p-5">
                       <div className="min-w-0">
                         <h3 className="t-card">
-                          <Link href={b.clinicPath} className="hover:underline">{b.clinicName}</Link>
+                          {b.clinicPath ? <Link href={b.clinicPath} className="hover:underline">{b.clinicName}</Link> : b.clinicName}
                           {b.name && b.name !== b.clinicName ? <span className="font-normal text-muted"> · {b.name}</span> : null}
                         </h3>
                         <p className="mt-1 flex gap-1.5 text-sm text-muted">
                           <PinIcon className="mt-0.5 h-4 w-4 shrink-0" />
                           <span>
-                            {[b.addressLine1, b.addressLine2, b.localityName, b.cityName].filter(Boolean).join(", ")} {b.pinCode}
+                            {b.kind === "service_area"
+                              ? `Visits patients at home in and around ${b.localityName}, ${b.cityName}`
+                              : `${[b.addressLine1, b.addressLine2, b.localityName, b.cityName].filter(Boolean).join(", ")} ${b.pinCode ?? ""}`}
                           </span>
                         </p>
                         {b.facilities?.length ? (
@@ -459,7 +461,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                     <li key={b.id} className="flex gap-3 rounded-[var(--r-ctl)] bg-surface-2 p-3 text-sm">
                       <PinIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
                       <div className="min-w-0">
-                        <p className="font-medium">{b.name && b.name !== b.clinicName ? b.name : b.localityName}</p>
+                        <p className="font-medium">{b.kind === "service_area" ? `Home visits · ${b.localityName}` : b.name && b.name !== b.clinicName ? b.name : b.localityName}</p>
                         <p className="text-muted">
                           {b.offerings.length} service{b.offerings.length === 1 ? "" : "s"}
                           {branchMin != null ? ` · from ${formatPaise(branchMin)}` : ""}

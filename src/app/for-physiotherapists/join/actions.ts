@@ -14,7 +14,8 @@ import { failTo, opt, plainText, str } from "@/lib/workspace/forms";
 const Signup = z.object({
   fullName: z.string().trim().min(2, "Enter your full name").max(80),
   mobile: z.string().trim().min(10, "Enter your mobile number").max(20),
-  email: z.union([z.literal(""), z.email("Enter a valid email address").max(120)]).optional(),
+  // Required: the email code is how the practitioner continues straight into the profile wizard.
+  email: z.email("Enter a valid email address").max(120),
   city: z.string().trim().min(2, "Enter your city").max(80),
   practiceType: z.enum(PRACTICE_TYPES.map((p) => p.value) as [string, ...string[]], { error: "Tell us how you practise" }),
   registrationNumber: z.string().trim().max(60).optional(),
@@ -28,7 +29,9 @@ const DAILY_LIMIT = 3;
  * Lead capture for the paid-acquisition landing page. No OTP: nothing is
  * published from this form, operations calls the practitioner and onboarding
  * verifies credentials as usual (VER-03, DIR-14). A repeat sign-up from the
- * same mobile within 30 days reuses the earlier reference.
+ * same mobile within 30 days reuses the earlier reference (and records the
+ * email if the earlier one had none). The thank-you page then offers the
+ * email code so the practitioner can build the profile immediately.
  */
 export async function submitPhysioSignup(formData: FormData) {
   let reference: string;
@@ -37,7 +40,7 @@ export async function submitPhysioSignup(formData: FormData) {
     const input = Signup.parse({
       fullName: str(formData, "fullName"),
       mobile: str(formData, "mobile"),
-      email: opt(formData, "email") ?? "",
+      email: str(formData, "email"),
       city: str(formData, "city"),
       practiceType: str(formData, "practiceType"),
       registrationNumber: opt(formData, "registrationNumber"),
@@ -58,11 +61,13 @@ export async function submitPhysioSignup(formData: FormData) {
     const existing = await db().execute<{ reference: string }>(sql`SELECT reference FROM practitioner_signups WHERE mobile = ${mobile} AND created_at > now() - interval '30 days' ORDER BY created_at DESC LIMIT 1`);
     if (existing.rows[0]) {
       reference = existing.rows[0].reference;
+      // Touch the row (updated_at trigger) so the thank-you page can offer the code; keep any earlier email.
+      await db().execute(sql`UPDATE practitioner_signups SET email = coalesce(email, ${input.email.toLowerCase()}) WHERE reference = ${reference}`);
     } else {
       reference = newPublicId();
       const ins = await db().execute<{ id: string }>(sql`
         INSERT INTO practitioner_signups (reference, full_name, mobile, email, city, practice_type, registration_number, attribution)
-        VALUES (${reference}, ${plainText(input.fullName, 80)}, ${mobile}, ${input.email ? input.email.toLowerCase() : null}, ${plainText(input.city, 80)},
+        VALUES (${reference}, ${plainText(input.fullName, 80)}, ${mobile}, ${input.email.toLowerCase()}, ${plainText(input.city, 80)},
           ${input.practiceType}, ${input.registrationNumber ? plainText(input.registrationNumber, 60) : null}, ${JSON.stringify(attribution)}::jsonb)
         RETURNING id`);
       await audit({ actorUserId: null, action: "practitioner_signup.create", objectType: "practitioner_signup", objectId: ins.rows[0].id, changedFields: { source: attribution.utm_source ?? null } });

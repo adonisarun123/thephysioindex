@@ -5,8 +5,9 @@ import { formatPaise } from "@/lib/money";
 import type { OnboardingStatus } from "@/lib/workspace/onboarding";
 import type { AssociationRow } from "@/lib/workspace/queries";
 import { ClinicFields, OfferingFields } from "@/components/workspace/forms/fields";
+import { PlaceCascade } from "@/components/workspace/forms/place-cascade";
 import { Empty, Field, Section, StatePill } from "@/components/workspace/forms/ui";
-import { addService, createClinic, joinExistingBranch, saveConsent, saveExpertise, submitListing } from "@/app/workspace/onboarding/actions";
+import { addService, addServiceArea, createClinic, joinExistingBranch, saveConsent, saveExpertise, submitListing } from "@/app/workspace/onboarding/actions";
 
 /** Wizard steps 3–6: practice, services and expertise, consent, review (LOC-01, CAL-02, PRO-03). */
 
@@ -17,14 +18,42 @@ export function PracticeStep(props: {
   states: Option[];
   cities: Option[];
   localities: Option[];
+  /** The join form said "I mainly do home visits": lead with the service-area option. */
+  homeVisitsFirst?: boolean;
 }) {
   const live = props.associations.filter((a) => a.state !== "ended");
   const reload = `/workspace/onboarding?step=practice`;
+  const serviceArea = (
+    <form action={addServiceArea}>
+      <Section
+        title={props.homeVisitsFirst ? "Where do you do home visits?" : "No clinic? Add the area you cover for home visits"}
+        lede="For home-visit and online physiotherapists. Patients see the area, never your address or PIN code. You can add more areas later."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <PlaceCascade idPrefix="sa-" states={props.states} cities={props.cities} localities={props.localities} selected={{ stateId: props.query.stateId, cityId: props.query.cityId }} reloadAction={reload} />
+          <Field label="PIN code of the area" htmlFor="sa-pinCode" hint="Six digits. Kept private; used only to check the area.">
+            <input id="sa-pinCode" name="pinCode" className="input" inputMode="numeric" pattern="[1-9][0-9]{5}" required maxLength={6} />
+          </Field>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button type="submit" className="btn btn-secondary">Add home-visit area</button>
+        </div>
+      </Section>
+    </form>
+  );
   return (
     <>
-      <Section title="Your clinics" lede="Where you see patients. Associations are approved by our team before they appear publicly (LOC-02).">
-        {live.length === 0 ? <Empty>No clinic yet. Join an existing clinic or add a new one below.</Empty> : <AssociationList items={live} />}
+      <Section title="Where you see patients" lede="Add a clinic, or the area you cover for home visits. Our team approves these with your profile (LOC-02).">
+        {live.length === 0 ? <Empty>Nothing added yet. Choose one option below — one is enough to submit.</Empty> : <AssociationList items={live} />}
+        {live.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link href="/workspace/onboarding?step=consent" className="btn btn-primary">Continue</Link>
+            <span className="self-center text-sm text-muted">Services and fees can be added now or after approval.</span>
+          </div>
+        ) : null}
       </Section>
+
+      {props.homeVisitsFirst ? serviceArea : null}
 
       <Section title="Join an existing clinic" lede="Search by clinic name. If your clinic is already listed, join its branch rather than creating a duplicate.">
         <form method="get" action="/workspace/onboarding" className="grid gap-3 sm:grid-cols-[2fr_1fr_auto] sm:items-end">
@@ -64,10 +93,11 @@ export function PracticeStep(props: {
           <ClinicFields states={props.states} cities={props.cities} localities={props.localities} selected={{ stateId: props.query.stateId, cityId: props.query.cityId }} reloadAction={reload} />
           <div className="mt-5 flex flex-wrap gap-3">
             <button type="submit" className="btn btn-secondary">Add clinic</button>
-            {live.length > 0 ? <Link href="/workspace/onboarding?step=services" className="btn btn-primary">Continue to services</Link> : null}
           </div>
         </Section>
       </form>
+
+      {props.homeVisitsFirst ? null : serviceArea}
     </>
   );
 }
@@ -78,8 +108,17 @@ export function AssociationList({ items }: { items: AssociationRow[] }) {
       {items.map((a) => (
         <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
           <div>
-            <p className="font-medium">{a.clinicName}{a.branchName !== a.clinicName ? ` — ${a.branchName}` : ""}</p>
-            <p className="text-muted">{a.address}, {a.localityName}, {a.cityName} {a.pinCode}</p>
+            {a.kind === "service_area" ? (
+              <>
+                <p className="font-medium">Home visits</p>
+                <p className="text-muted">{a.localityName}, {a.cityName}</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium">{a.clinicName}{a.branchName !== a.clinicName ? ` — ${a.branchName}` : ""}</p>
+                <p className="text-muted">{a.address}, {a.localityName}, {a.cityName} {a.pinCode}</p>
+              </>
+            )}
           </div>
           <StatePill state={a.state} />
         </li>
@@ -97,12 +136,12 @@ export function ServicesStep(props: { associations: AssociationRow[]; services: 
     <>
       <Section title="Services and fees" lede="One service per clinic branch. Duration, interval and buffers default to platform values and are validated independently (CAL-03). Fees are in rupees, pay at clinic.">
         {live.length === 0 ? (
-          <Empty>Add a clinic first — services belong to a clinic branch. <Link href="/workspace/onboarding?step=practice" className="underline">Go to practice</Link>.</Empty>
+          <Empty>Add a clinic or home-visit area first — services belong to a location. <Link href="/workspace/onboarding?step=practice" className="underline">Go to practice</Link>.</Empty>
         ) : (
           <div className="grid gap-6">
             {live.map((a) => (
               <div key={a.id}>
-                <h3 className="font-semibold">{a.clinicName}{a.branchName !== a.clinicName ? ` — ${a.branchName}` : ""} <span className="text-sm font-normal text-muted">· {a.localityName}, {a.cityName}</span></h3>
+                <h3 className="font-semibold">{a.kind === "service_area" ? "Home visits" : `${a.clinicName}${a.branchName !== a.clinicName ? ` — ${a.branchName}` : ""}`} <span className="text-sm font-normal text-muted">· {a.localityName}, {a.cityName}</span></h3>
                 {a.offerings.length ? (
                   <ul className="mt-2 divide-y divide-line border-y border-line text-sm">
                     {a.offerings.map((o) => (
@@ -194,21 +233,26 @@ export function ConsentStep({ versions, done }: { versions: { providerTerms: str
   );
 }
 
-export function ReviewStep({ status, gaps, listingStatus }: { status: OnboardingStatus; gaps: string[]; listingStatus: string }) {
+export function ReviewStep({ status, gaps, recommended, listingStatus }: { status: OnboardingStatus; gaps: string[]; recommended: string[]; listingStatus: string }) {
   const submitted = status.versionState === "submitted" || listingStatus === "submitted";
   return (
-    <Section title="Review and submit" lede="Drafts, submissions and rejections never appear in public search. Approval creates the first published version (PRO-03).">
+    <Section title="Review and submit" lede="Nothing is public until our team approves it. Approval publishes your profile (PRO-03).">
       <dl className="grid gap-2 text-sm sm:grid-cols-2">
-        <Item label="Identity" ok={status.completed.identity} href="identity" />
-        <Item label="Qualifications and credentials" ok={status.completed.credentials} href="credentials" />
-        <Item label="Clinic location" ok={status.completed.practice} href="practice" />
-        <Item label="Services and fees, expertise, about" ok={status.completed.services && Boolean(status.draft.specialties?.length) && (status.draft.about?.length ?? 0) >= 100} href="services" />
+        <Item label="Name" ok={status.completed.identity} href="identity" />
+        <Item label="Qualification and registration" ok={status.completed.credentials} href="credentials" />
+        <Item label="Clinic or home-visit area" ok={status.completed.practice} href="practice" />
         <Item label="Consent and terms" ok={status.completed.consent} href="consent" />
+        <Item label="Services, fees and about (optional)" ok={status.completed.services && Boolean(status.draft.specialties?.length) && (status.draft.about?.length ?? 0) >= 100} href="services" />
       </dl>
       {gaps.length ? (
         <div className="mt-4 rounded-[var(--r-sm)] border border-mark bg-mark-soft p-3 text-sm">
           <p className="font-medium">Still needed before you can submit</p>
           <ul className="mt-1 list-disc pl-5">{gaps.map((g) => <li key={g}>{g}</li>)}</ul>
+        </div>
+      ) : recommended.length ? (
+        <div className="mt-4 rounded-[var(--r-sm)] border border-line bg-surface-2 p-3 text-sm">
+          <p className="font-medium">You can submit now. Add these later to get more enquiries:</p>
+          <ul className="mt-1 list-disc pl-5">{recommended.map((g) => <li key={g}>{g}</li>)}</ul>
         </div>
       ) : null}
       {submitted ? (

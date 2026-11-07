@@ -102,7 +102,7 @@ export async function pendingActions(practitionerId: string, listingStatus: stri
   if (!s.completed.identity) out.push({ label: "Complete your identity details", href: "/workspace/profile#identity" });
   if (!s.draft.about || s.draft.about.length < 100) out.push({ label: "Write your About section (at least 100 characters)", href: "/workspace/profile#about" });
   if (s.credentialCount === 0) out.push({ label: "Add a registration or enrolment credential", href: "/workspace/profile#credentials" });
-  if (s.branchCount === 0) out.push({ label: "Add a clinic", href: "/workspace/clinics" });
+  if (s.branchCount === 0) out.push({ label: "Add a clinic or home-visit area", href: "/workspace/onboarding?step=practice" });
   if (s.offeringCount === 0) out.push({ label: "Add services and fees", href: "/workspace/clinics" });
   if (!s.consents) out.push({ label: "Accept provider terms and publication consent", href: "/workspace/onboarding?step=consent" });
   if (["draft", "rejected", "changes_requested"].includes(listingStatus) && s.versionState === "draft") out.push({ label: "Submit your profile for review", href: "/workspace/profile#submit" });

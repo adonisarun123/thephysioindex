@@ -96,7 +96,7 @@ export function ClinicFields({ states, cities, localities, selected, reloadActio
   );
 }
 
-export function CredentialFields({ authorities }: { authorities: AuthorityOption[] }) {
+export function CredentialFields({ authorities, defaultNumber }: { authorities: AuthorityOption[]; defaultNumber?: string }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="sm:col-span-2">
@@ -110,7 +110,7 @@ export function CredentialFields({ authorities }: { authorities: AuthorityOption
         </Field>
       </div>
       <Field label="Number as printed" htmlFor="number">
-        <input id="number" name="number" className="input" required minLength={2} maxLength={60} />
+        <input id="number" name="number" className="input" required minLength={2} maxLength={60} defaultValue={defaultNumber} />
       </Field>
       <Field label="Type (optional override)" htmlFor="type">
         <select id="type" name="type" className="input" defaultValue="">

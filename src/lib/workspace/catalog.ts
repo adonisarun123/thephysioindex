@@ -72,7 +72,7 @@ export async function searchBranches(q: string, cityName?: string): Promise<Bran
       concat_ws(', ', b.address_line1, b.address_line2) AS address, l.name AS locality_name, ci.name AS city_name, st.name AS state_name, b.pin_code
     FROM branches b JOIN clinics c ON c.id = b.clinic_id
     JOIN localities l ON l.id = b.locality_id JOIN cities ci ON ci.id = b.city_id JOIN states st ON st.id = b.state_id
-    WHERE c.status <> 'archived' AND b.status <> 'archived'
+    WHERE c.status <> 'archived' AND b.status <> 'archived' AND b.kind = 'clinic'
       AND (lower(c.name) % lower(${term}) OR lower(c.name) LIKE lower(${`%${term}%`}))
       ${cityName ? sql`AND (lower(ci.name) = lower(${cityName}) OR EXISTS (SELECT 1 FROM geo_aliases ga WHERE ga.target_type = 'city' AND ga.target_id = ci.id AND ga.alias_normalised = regexp_replace(lower(${cityName}), '[^a-z0-9]', '', 'g')))` : sql``}
     ORDER BY similarity(lower(c.name), lower(${term})) DESC, c.name, b.name

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api";
 import { offeringDefaults } from "@/lib/workspace/catalog";
-import { createClinicBranch, endAssociation, joinBranch, updateContactRules } from "@/lib/workspace/clinics";
+import { createClinicBranch, createServiceArea, endAssociation, joinBranch, ServiceAreaSchema, updateContactRules } from "@/lib/workspace/clinics";
 import { requireManage } from "@/lib/workspace/context";
 import { bool, done, failTo, opt, str } from "@/lib/workspace/forms";
 import { createOffering, reviseOffering, setOfferingActive } from "@/lib/workspace/offerings";
@@ -33,6 +33,26 @@ export async function createClinicAction(formData: FormData) {
     done(PAGE, { ok: input.newLocalityName && !input.localityId ? "Clinic added; the new locality has gone to review." : "Clinic added. The association is pending approval." });
   } catch (err) {
     failTo(`${PAGE}#add`, err);
+  }
+}
+
+/** Home-visit / online coverage for a live practitioner (LOC-04); approved like any association. */
+export async function createServiceAreaAction(formData: FormData) {
+  try {
+    const { viewer, practitioner } = await requireManage();
+    const localityId = opt(formData, "localityId");
+    const input = ServiceAreaSchema.parse({
+      stateId: str(formData, "stateId"),
+      cityId: str(formData, "cityId"),
+      localityId: localityId && localityId !== "__new" ? localityId : undefined,
+      newLocalityName: localityId === "__new" || !localityId ? opt(formData, "newLocalityName") : undefined,
+      pinCode: str(formData, "pinCode"),
+    });
+    await createServiceArea(practitioner.id, viewer.userId, input);
+    revalidatePath(PAGE);
+    done(PAGE, { ok: input.newLocalityName && !input.localityId ? "Home-visit area added; the new locality has gone to review." : "Home-visit area added. It becomes public once approved." });
+  } catch (err) {
+    failTo(`${PAGE}#home-visits`, err);
   }
 }
 
