@@ -6,11 +6,13 @@ import { authClient } from "@/lib/auth/client";
 /**
  * Email OTP sign-in.
  * - staff: then TOTP (IAM-03, SEC-02).
+ * - patient: signs in or creates a patient account. Booking confirmations and
+ *   reminders go to the verified email until SMS is live (MSG-01).
  * - practitioner: signs in or creates the account, then records the
  *   practitioner intent like the mobile flow does. A staff account using this
  *   form still gets the TOTP challenge (enforced server-side).
  */
-export function EmailSignIn({ next = "/admin", audience = "staff", initialEmail = "" }: { next?: string; audience?: "staff" | "practitioner"; initialEmail?: string }) {
+export function EmailSignIn({ next = "/admin", audience = "staff", initialEmail = "" }: { next?: string; audience?: "staff" | "practitioner" | "patient"; initialEmail?: string }) {
   const [email, setEmail] = useState(initialEmail);
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"email" | "otp">("email");
@@ -44,7 +46,7 @@ export function EmailSignIn({ next = "/admin", audience = "staff", initialEmail 
       window.location.href = `/admin/mfa?next=${encodeURIComponent(staff ? next : "/admin")}`;
       return;
     }
-    if (!staff) {
+    if (audience === "practitioner") {
       await fetch("/api/v1/me/intent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "practitioner" }) }).catch(() => {});
     }
     window.location.href = next;

@@ -4,6 +4,7 @@ import { db, withTransaction, type Db } from "@/db/client";
 import { audit } from "@/lib/audit";
 import { ApiError } from "@/lib/api";
 import { openCase } from "./cases";
+import { profileChecklist, type CompletionExtra } from "./completion";
 import { textArray } from "@/lib/sql";
 
 /**
@@ -126,32 +127,21 @@ async function changedFieldsOf(tx: Db, versionId: string): Promise<string[]> {
   return res.rows[0]?.changed_fields ?? [];
 }
 
-/** Mandatory fields for a submitted profile (PRO-03, PRO-08). Returns human-readable gaps. */
-type SubmissionExtra = { credentialCount: number; branchCount: number; offeringCount: number; consents: boolean };
-
 /**
- * Lean submission core (PRO-03, owner decision 7 Nov 2026): who you are, that
- * you are registered, where patients find you, and consent. Everything else is
- * recommended, not blocking — a submitted profile can be completed after approval.
+ * Submission gate (PRO-03, owner decision 7 Nov 2026): a profile goes to
+ * verification only at 100% of the completion checklist, so every listing
+ * that can be approved, and therefore booked, is complete. Returns the
+ * outstanding items in plain words.
  */
-export function validateForSubmission(content: ProfileDraft, extra: SubmissionExtra): string[] {
-  const gaps: string[] = [];
-  const id = content.identity;
-  if (!id || id.displayName.trim().length < 2) gaps.push("Name (2–120 characters)");
-  if (!content.qualifications?.length) gaps.push("At least one qualification");
-  if (extra.credentialCount === 0) gaps.push("At least one registration or enrolment credential");
-  if (extra.branchCount === 0) gaps.push("A clinic or a home-visit area");
-  if (!extra.consents) gaps.push("Publication consent and provider terms");
-  return gaps;
+export function validateForSubmission(content: ProfileDraft, extra: CompletionExtra): string[] {
+  return profileChecklist(content, extra).filter((i) => !i.done).map((i) => i.todo);
 }
 
-/** Profile completeness items that improve the listing but do not block submission. */
-export function recommendedAdditions(content: ProfileDraft, extra: SubmissionExtra): string[] {
+/** Optional extras that improve a listing but never block it. */
+export function recommendedAdditions(content: ProfileDraft): string[] {
   const out: string[] = [];
-  if (extra.offeringCount === 0) out.push("A service with a fee");
-  if (!content.specialties?.some((s) => s.isPrimary)) out.push("A primary area of practice");
-  if (!content.languages?.length) out.push("Languages you consult in");
-  if (!content.about || content.about.trim().length < 100) out.push("An About section (at least 100 characters)");
+  if (!content.identity?.headline?.trim()) out.push("A one-line professional headline");
+  if (!content.experiences?.length) out.push("Your work experience");
   return out;
 }
 

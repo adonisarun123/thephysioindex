@@ -48,6 +48,8 @@ async function Wizard({ searchParams }: { searchParams: PageProps<"/workspace/on
   const viewer = await getViewer();
   if (!viewer) redirect(`/sign-in?as=practitioner&next=${encodeURIComponent("/workspace/onboarding")}`);
   const practitioner = await resolveWorkspacePractitioner(viewer);
+  // New profiles start from the one-screen registration (owner decision 7 Nov 2026).
+  if (!practitioner) redirect("/for-physiotherapists/join#register");
   const requested = typeof sp.step === "string" && (STEPS as readonly string[]).includes(sp.step) ? (sp.step as Step) : "identity";
   const step: Step = practitioner ? requested : "identity";
   const msg = readMessage(sp);
@@ -124,5 +126,5 @@ async function StepBody({ step, practitionerId, listingStatus, sp, status, signu
     return <ConsentStep versions={versions} done={status.consents} />;
   }
   const gaps = validateForSubmission(status.draft, status);
-  return <ReviewStep status={status} gaps={gaps} recommended={recommendedAdditions(status.draft, status)} listingStatus={listingStatus} />;
+  return <ReviewStep status={status} gaps={gaps} recommended={recommendedAdditions(status.draft)} listingStatus={listingStatus} />;
 }

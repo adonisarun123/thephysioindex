@@ -1,53 +1,57 @@
 "use server";
 
 import { sql } from "drizzle-orm";
-import { redirect } from "next/navigation";
-import { z } from "zod";
+import { ZodError } from "zod";
 import { db } from "@/db/client";
 import { ApiError } from "@/lib/api";
-import { audit } from "@/lib/audit";
-import { normaliseIndianMobile } from "@/lib/messaging/sms";
-import { newPublicId } from "@/lib/public-id";
-import { ATTRIBUTION_KEYS, PRACTICE_TYPES } from "@/lib/practitioner-signups";
-import { failTo, opt, plainText, str } from "@/lib/workspace/forms";
+import { getViewer } from "@/lib/auth/session";
+import { ATTRIBUTION_KEYS } from "@/lib/practitioner-signups";
+import { opt, str } from "@/lib/workspace/forms";
+import { RegistrationSchema, registerPractitioner } from "@/lib/workspace/registration";
 
-const Signup = z.object({
-  fullName: z.string().trim().min(2, "Enter your full name").max(80),
-  mobile: z.string().trim().min(10, "Enter your mobile number").max(20),
-  // Required: the email code is how the practitioner continues straight into the profile wizard.
-  email: z.email("Enter a valid email address").max(120),
-  city: z.string().trim().min(2, "Enter your city").max(80),
-  practiceType: z.enum(PRACTICE_TYPES.map((p) => p.value) as [string, ...string[]], { error: "Tell us how you practise" }),
-  registrationNumber: z.string().trim().max(60).optional(),
-  consent: z.literal(true, { error: "Please allow us to contact you about your listing" }),
-});
+export type RegisterResult = { error?: string; redirectTo?: string };
 
-const FORM = "/for-physiotherapists/join";
-const DAILY_LIMIT = 3;
+const FIELD_LABELS: Record<string, string> = {
+  fullName: "Full name", mobile: "Mobile", degree: "Qualification", institution: "College or university", authorityId: "Registered with",
+  registrationNumber: "Registration number", practiceMode: "Where you see patients", clinicName: "Clinic name", addressLine1: "Clinic address",
+  stateId: "State", cityId: "City", localityId: "Locality", pinCode: "PIN code",
+};
 
 /**
- * Lead capture for the paid-acquisition landing page. No OTP: nothing is
- * published from this form, operations calls the practitioner and onboarding
- * verifies credentials as usual (VER-03, DIR-14). A repeat sign-up from the
- * same mobile within 30 days reuses the earlier reference (and records the
- * email if the earlier one had none). The thank-you page then offers the
- * email code so the practitioner can build the profile immediately.
+ * One-screen registration (PRO-02, PRO-03). Runs after the browser has
+ * verified the email with a one-time code, so the caller is a signed-in
+ * account. Creates the draft profile and returns where to go next; the
+ * thank-you page records the ad conversion. Errors come back as text so the
+ * form keeps what the practitioner typed.
  */
-export async function submitPhysioSignup(formData: FormData) {
-  let reference: string;
+export async function registerPhysio(formData: FormData): Promise<RegisterResult> {
   try {
     if (str(formData, "website")) throw new ApiError("INVALID_INPUT", "Please try again"); // honeypot
-    const input = Signup.parse({
+    const viewer = await getViewer();
+    if (!viewer?.email) return { error: "Verify your email with the code first." };
+    if (viewer.kind === "staff") return { error: "Staff accounts cannot register a practice. Sign out and use your own email." };
+
+    const owned = await db().execute<{ id: string }>(sql`SELECT id FROM practitioners WHERE owner_user_id = ${viewer.userId} AND listing_status <> 'archived' LIMIT 1`);
+    if (owned.rows[0]) return { redirectTo: "/workspace?ok=You+already+have+a+profile" };
+
+    const input = RegistrationSchema.parse({
       fullName: str(formData, "fullName"),
       mobile: str(formData, "mobile"),
-      email: str(formData, "email"),
-      city: str(formData, "city"),
-      practiceType: str(formData, "practiceType"),
-      registrationNumber: opt(formData, "registrationNumber"),
-      consent: formData.get("consent") === "on",
+      degree: str(formData, "degree") === "__other" ? str(formData, "degreeOther") : str(formData, "degree"),
+      institution: str(formData, "institution"),
+      authorityId: str(formData, "authorityId"),
+      registrationNumber: str(formData, "registrationNumber"),
+      practiceMode: str(formData, "practiceMode"),
+      clinicName: opt(formData, "clinicName"),
+      addressLine1: opt(formData, "addressLine1"),
+      stateId: str(formData, "stateId"),
+      cityId: str(formData, "cityId"),
+      localityId: opt(formData, "localityId"),
+      newLocalityName: opt(formData, "newLocalityName"),
+      pinCode: str(formData, "pinCode"),
+      consentTerms: formData.get("consentTerms") === "on",
+      consentContact: formData.get("consentContact") === "on",
     });
-    const mobile = normaliseIndianMobile(input.mobile);
-    if (!mobile) throw new ApiError("INVALID_INPUT", "Enter a valid 10-digit Indian mobile number");
 
     const attribution: Record<string, string> = {};
     for (const k of ATTRIBUTION_KEYS) {
@@ -55,25 +59,16 @@ export async function submitPhysioSignup(formData: FormData) {
       if (v) attribution[k] = v.slice(0, 200);
     }
 
-    const recent = await db().execute<{ n: string | number }>(sql`SELECT count(*) AS n FROM practitioner_signups WHERE mobile = ${mobile} AND created_at > now() - interval '1 day'`);
-    if (Number(recent.rows[0]?.n ?? 0) >= DAILY_LIMIT) throw new ApiError("RATE_LIMITED", "We already have your details. Our team will call you.");
-
-    const existing = await db().execute<{ reference: string }>(sql`SELECT reference FROM practitioner_signups WHERE mobile = ${mobile} AND created_at > now() - interval '30 days' ORDER BY created_at DESC LIMIT 1`);
-    if (existing.rows[0]) {
-      reference = existing.rows[0].reference;
-      // Touch the row (updated_at trigger) so the thank-you page can offer the code; keep any earlier email.
-      await db().execute(sql`UPDATE practitioner_signups SET email = coalesce(email, ${input.email.toLowerCase()}) WHERE reference = ${reference}`);
-    } else {
-      reference = newPublicId();
-      const ins = await db().execute<{ id: string }>(sql`
-        INSERT INTO practitioner_signups (reference, full_name, mobile, email, city, practice_type, registration_number, attribution)
-        VALUES (${reference}, ${plainText(input.fullName, 80)}, ${mobile}, ${input.email.toLowerCase()}, ${plainText(input.city, 80)},
-          ${input.practiceType}, ${input.registrationNumber ? plainText(input.registrationNumber, 60) : null}, ${JSON.stringify(attribution)}::jsonb)
-        RETURNING id`);
-      await audit({ actorUserId: null, action: "practitioner_signup.create", objectType: "practitioner_signup", objectId: ins.rows[0].id, changedFields: { source: attribution.utm_source ?? null } });
-    }
+    const { reference } = await registerPractitioner({ userId: viewer.userId, email: viewer.email }, input, attribution);
+    return { redirectTo: `/for-physiotherapists/join/thank-you?ref=${reference}` };
   } catch (err) {
-    failTo(FORM, err);
+    if (err instanceof ZodError) {
+      const i = err.issues[0];
+      const field = typeof i?.path[0] === "string" ? FIELD_LABELS[i.path[0]] : undefined;
+      return { error: `${field ? `${field}: ` : ""}${i?.message ?? "Check the form and try again"}` };
+    }
+    if (err instanceof ApiError) return { error: err.message };
+    console.error("registerPhysio failed", err);
+    return { error: "Something went wrong. Your progress is saved; sign in to continue from your workspace." };
   }
-  redirect(`${FORM}/thank-you?ref=${reference}`);
 }

@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit";
 import { ApiError } from "@/lib/api";
 import { newPublicId } from "@/lib/public-id";
 import { slugify } from "@/lib/slug";
+import { profileChecklist } from "./completion";
 import { getLatestVersion, type ProfileDraft } from "./draft";
 import { consentState, listAssociations, listCredentials } from "./queries";
 
@@ -66,13 +67,21 @@ export type OnboardingStatus = {
   versionState: string | null;
   credentialCount: number;
   branchCount: number;
+  clinicCount: number;
   offeringCount: number;
+  availabilityRuleCount: number;
   consents: boolean;
   completed: Record<Step, boolean>;
 };
 
 export async function onboardingStatus(practitionerId: string): Promise<OnboardingStatus> {
-  const [latest, creds, assoc, consents] = await Promise.all([getLatestVersion(practitionerId), listCredentials(practitionerId), listAssociations(practitionerId), consentState(practitionerId)]);
+  const [latest, creds, assoc, consents, rules] = await Promise.all([
+    getLatestVersion(practitionerId),
+    listCredentials(practitionerId),
+    listAssociations(practitionerId),
+    consentState(practitionerId),
+    db().execute<{ n: string | number }>(sql`SELECT count(*) AS n FROM availability_rules r JOIN calendar_resources cr ON cr.id = r.resource_id WHERE cr.practitioner_id = ${practitionerId} AND (r.effective_to IS NULL OR r.effective_to >= current_date)`),
+  ]);
   const draft = latest?.content ?? {};
   const live = assoc.filter((a) => a.state !== "ended" && a.state !== "rejected");
   const offeringCount = live.reduce((n, a) => n + a.offerings.length, 0);
@@ -82,7 +91,9 @@ export async function onboardingStatus(practitionerId: string): Promise<Onboardi
     versionState: latest?.state ?? null,
     credentialCount: creds.length,
     branchCount: live.length,
+    clinicCount: live.filter((a) => a.kind !== "service_area").length,
     offeringCount,
+    availabilityRuleCount: Number(rules.rows[0]?.n ?? 0),
     consents: consentOk,
     completed: {
       identity: Boolean(draft.identity?.displayName),
@@ -95,18 +106,12 @@ export async function onboardingStatus(practitionerId: string): Promise<Onboardi
   };
 }
 
-/** Pending actions for the overview (Section 15). */
+/** Pending actions for the overview (Section 15): the open completion items, then submission. */
 export async function pendingActions(practitionerId: string, listingStatus: string): Promise<{ label: string; href: string }[]> {
   const s = await onboardingStatus(practitionerId);
-  const out: { label: string; href: string }[] = [];
-  if (!s.completed.identity) out.push({ label: "Complete your identity details", href: "/workspace/profile#identity" });
-  if (!s.draft.about || s.draft.about.length < 100) out.push({ label: "Write your About section (at least 100 characters)", href: "/workspace/profile#about" });
-  if (s.credentialCount === 0) out.push({ label: "Add a registration or enrolment credential", href: "/workspace/profile#credentials" });
-  if (s.branchCount === 0) out.push({ label: "Add a clinic or home-visit area", href: "/workspace/onboarding?step=practice" });
-  if (s.offeringCount === 0) out.push({ label: "Add services and fees", href: "/workspace/clinics" });
-  if (!s.consents) out.push({ label: "Accept provider terms and publication consent", href: "/workspace/onboarding?step=consent" });
-  if (["draft", "rejected", "changes_requested"].includes(listingStatus) && s.versionState === "draft") out.push({ label: "Submit your profile for review", href: "/workspace/profile#submit" });
-  const rules = await db().execute<{ n: string | number }>(sql`SELECT count(*) AS n FROM availability_rules r JOIN calendar_resources cr ON cr.id = r.resource_id WHERE cr.practitioner_id = ${practitionerId} AND (r.effective_to IS NULL OR r.effective_to >= current_date)`);
-  if (Number(rules.rows[0]?.n ?? 0) === 0) out.push({ label: "Publish weekly availability", href: "/workspace/calendar" });
+  const out = profileChecklist(s.draft, s).filter((i) => !i.done).map((i) => ({ label: i.todo, href: i.href }));
+  if (out.length === 0 && ["draft", "rejected", "changes_requested"].includes(listingStatus) && s.versionState === "draft") {
+    out.push({ label: "Your profile is 100% complete. Submit it for verification", href: "/workspace/profile#submit" });
+  }
   return out;
 }

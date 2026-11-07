@@ -157,8 +157,8 @@ async function WhoFor({ canonical, base, offeringId, date, startsAt }: { canonic
     return (
       <section className="card mt-4 p-5">
         <h2 className="text-lg font-semibold">3. Sign in to continue</h2>
-        <p className="mt-2 text-sm text-muted">We confirm appointments to a verified mobile number.</p>
-        <Link href={`/sign-in?next=${encodeURIComponent(here)}`} className="btn btn-primary mt-4">Sign in with mobile OTP</Link>
+        <p className="mt-2 text-sm text-muted">Sign in with a one-time code. We send your confirmation and reminders to the email or mobile you verify.</p>
+        <Link href={`/sign-in?next=${encodeURIComponent(here)}`} className="btn btn-primary mt-4">Sign in to book</Link>
       </section>
     );
   }
