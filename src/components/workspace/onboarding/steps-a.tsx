@@ -46,7 +46,7 @@ export function IdentityStep({ identity, isNew }: { identity: ProfileDraft["iden
 
 const YEAR = new Date().getFullYear();
 
-export function CredentialsStep({ qualifications, credentials, authorities }: { qualifications: NonNullable<ProfileDraft["qualifications"]>; credentials: CredentialRow[]; authorities: AuthorityOption[] }) {
+export function CredentialsStep({ qualifications, credentials, authorities, registrationHint = null }: { qualifications: NonNullable<ProfileDraft["qualifications"]>; credentials: CredentialRow[]; authorities: AuthorityOption[]; registrationHint?: string | null }) {
   const rows = [...qualifications, ...Array.from({ length: Math.max(1, 3 - qualifications.length) }, () => null)];
   return (
     <>
@@ -101,7 +101,7 @@ export function CredentialsStep({ qualifications, credentials, authorities }: { 
           </ul>
         )}
         <form action={addRegistration} className="mt-5">
-          <CredentialFields authorities={authorities} />
+          <CredentialFields authorities={authorities} defaultNumber={credentials.length === 0 ? registrationHint ?? undefined : undefined} />
           <div className="mt-4 flex flex-wrap gap-3">
             <button type="submit" className="btn btn-secondary">Add credential</button>
             <Link href="/workspace/onboarding?step=practice" className="btn btn-primary">Continue to practice</Link>

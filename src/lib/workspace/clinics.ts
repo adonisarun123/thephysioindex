@@ -25,7 +25,7 @@ export const NewClinicBranchSchema = z.object({
 export type NewClinicBranch = z.infer<typeof NewClinicBranchSchema>;
 
 /** Creates clinic + branch (draft) and a pending association. A new locality enters review as 'proposed' (DIR-08). */
-export async function createClinicBranch(practitionerId: string, actorUserId: string, input: NewClinicBranch): Promise<{ associationId: string; branchId: string }> {
+export async function createClinicBranch(practitionerId: string, actorUserId: string, input: NewClinicBranch, kind: "clinic" | "service_area" = "clinic"): Promise<{ associationId: string; branchId: string }> {
   return withTransaction(async (_c, tx) => {
     const city = await tx.execute<{ id: string }>(sql`SELECT id FROM cities WHERE id = ${input.cityId} AND state_id = ${input.stateId} AND status = 'active'`);
     if (!city.rows[0]) throw new ApiError("INVALID_INPUT", "City does not belong to the selected state");
@@ -53,8 +53,8 @@ export async function createClinicBranch(practitionerId: string, actorUserId: st
       INSERT INTO clinics (public_id, slug, name, owner_user_id, public_phone, status)
       VALUES (${newPublicId()}, ${slugify(input.clinicName)}, ${input.clinicName}, ${actorUserId}, ${input.phone || null}, 'draft') RETURNING id`);
     const branch = await tx.execute<{ id: string }>(sql`
-      INSERT INTO branches (clinic_id, name, address_line1, address_line2, locality_id, city_id, state_id, pin_code, public_phone, status)
-      VALUES (${clinic.rows[0].id}, ${input.branchName || input.clinicName}, ${input.addressLine1}, ${input.addressLine2 || null}, ${localityId}, ${input.cityId}, ${input.stateId}, ${input.pinCode}, ${input.phone || null}, 'draft') RETURNING id`);
+      INSERT INTO branches (clinic_id, name, address_line1, address_line2, locality_id, city_id, state_id, pin_code, public_phone, status, kind)
+      VALUES (${clinic.rows[0].id}, ${input.branchName || input.clinicName}, ${input.addressLine1}, ${input.addressLine2 || null}, ${localityId}, ${input.cityId}, ${input.stateId}, ${input.pinCode}, ${input.phone || null}, 'draft', ${kind}) RETURNING id`);
     const branchId = branch.rows[0].id;
     if (proposalId) {
       await tx.execute(sql`UPDATE locality_proposals SET branch_id = ${branchId} WHERE id = ${proposalId}`);
@@ -63,16 +63,50 @@ export async function createClinicBranch(practitionerId: string, actorUserId: st
     const assoc = await tx.execute<{ id: string }>(sql`
       INSERT INTO practitioner_branches (practitioner_id, branch_id, state, bookable, public_contact_rules)
       VALUES (${practitionerId}, ${branchId}, 'pending', true, '{"showBranchPhone": true}'::jsonb) RETURNING id`);
-    await audit({ actorUserId, action: "clinic.create", objectType: "clinic", objectId: clinic.rows[0].id, changedFields: { branchId, practitionerId, proposalId } }, tx);
+    await audit({ actorUserId, action: kind === "service_area" ? "service_area.create" : "clinic.create", objectType: "clinic", objectId: clinic.rows[0].id, changedFields: { branchId, practitionerId, proposalId, kind } }, tx);
     await audit({ actorUserId, action: "association.request", objectType: "practitioner_branch", objectId: assoc.rows[0].id }, tx);
     return { associationId: assoc.rows[0].id, branchId };
   });
 }
 
+export const ServiceAreaSchema = z.object({
+  stateId: z.uuid("Choose a state"),
+  cityId: z.uuid("Choose a city"),
+  localityId: z.uuid().optional(),
+  newLocalityName: z.string().trim().min(2).max(120).optional(),
+  pinCode: z.string().regex(/^[1-9][0-9]{5}$/, "PIN code must be six digits"),
+}).refine((v) => v.localityId || v.newLocalityName, { message: "Choose the area you cover or propose a new one", path: ["localityId"] });
+
+export type ServiceArea = z.infer<typeof ServiceAreaSchema>;
+
+/**
+ * Home-visit / online practitioners have no walk-in address. Their coverage is
+ * stored as a 'service_area' branch of their own sole-practice record so the
+ * existing location pages, search and approval work unchanged (LOC-01, LOC-02,
+ * LOC-04). The address and PIN are never published and no clinic page exists.
+ */
+export async function createServiceArea(practitionerId: string, actorUserId: string, input: ServiceArea): Promise<{ associationId: string; branchId: string }> {
+  const p = await db().execute<{ display_name: string }>(sql`SELECT display_name FROM practitioners WHERE id = ${practitionerId}`);
+  const name = p.rows[0]?.display_name ?? "Physiotherapist";
+  if (input.localityId) {
+    const dup = await db().execute<{ id: string }>(sql`
+      SELECT pb.id FROM practitioner_branches pb JOIN branches b ON b.id = pb.branch_id
+      WHERE pb.practitioner_id = ${practitionerId} AND pb.state IN ('pending','approved') AND pb.active_to IS NULL
+        AND b.kind = 'service_area' AND b.locality_id = ${input.localityId} LIMIT 1`);
+    if (dup.rows[0]) throw new ApiError("CONFLICT", "You already cover this area");
+  }
+  return createClinicBranch(
+    practitionerId,
+    actorUserId,
+    { clinicName: `${name} — home visits`.slice(0, 160), branchName: "Home visits", addressLine1: "Home visits (address not published)", addressLine2: "", stateId: input.stateId, cityId: input.cityId, localityId: input.localityId, newLocalityName: input.newLocalityName, pinCode: input.pinCode, phone: "" },
+    "service_area",
+  );
+}
+
 /** Joins an existing branch; the association waits for approval (LOC-02, LOC-03). */
 export async function joinBranch(practitionerId: string, actorUserId: string, branchId: string): Promise<string> {
   return withTransaction(async (_c, tx) => {
-    const b = await tx.execute<{ id: string }>(sql`SELECT b.id FROM branches b JOIN clinics c ON c.id = b.clinic_id WHERE b.id = ${branchId} AND b.status <> 'archived' AND c.status <> 'archived'`);
+    const b = await tx.execute<{ id: string }>(sql`SELECT b.id FROM branches b JOIN clinics c ON c.id = b.clinic_id WHERE b.id = ${branchId} AND b.kind = 'clinic' AND b.status <> 'archived' AND c.status <> 'archived'`);
     if (!b.rows[0]) throw new ApiError("NOT_FOUND", "Clinic branch not found");
     const dup = await tx.execute<{ id: string }>(sql`SELECT id FROM practitioner_branches WHERE practitioner_id = ${practitionerId} AND branch_id = ${branchId} AND state IN ('pending', 'approved') AND active_to IS NULL`);
     if (dup.rows[0]) throw new ApiError("CONFLICT", "You are already associated with this branch");

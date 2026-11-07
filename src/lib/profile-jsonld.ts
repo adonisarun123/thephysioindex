@@ -26,7 +26,11 @@ export function practitionerJsonLd(p: PublicProfile, siteUrl: string) {
       name: q.degree,
       recognizedBy: { "@type": "EducationalOrganization", name: q.institution },
     })),
-    worksFor: p.branches.map((b) => ({
+    // Home-visit areas are not organisations with an address; they become areaServed (LOC-04).
+    ...(p.branches.some((b) => b.kind === "service_area")
+      ? { areaServed: p.branches.filter((b) => b.kind === "service_area").map((b) => ({ "@type": "Place", name: `${b.localityName}, ${b.cityName}` })) }
+      : {}),
+    worksFor: p.branches.filter((b): b is typeof b & { clinicPath: string } => b.kind !== "service_area" && b.clinicPath != null).map((b) => ({
       "@type": "Physiotherapy",
       "@id": `${new URL(b.clinicPath, siteUrl).toString()}#branch-${b.id}`,
       name: b.clinicName,

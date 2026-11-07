@@ -1,0 +1,2 @@
+ALTER TABLE "branches" ADD COLUMN "kind" text DEFAULT 'clinic' NOT NULL;--> statement-breakpoint
+ALTER TABLE "branches" ADD CONSTRAINT "branches_kind_chk" CHECK ("branches"."kind" IN ('clinic', 'service_area'));

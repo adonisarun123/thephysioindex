@@ -8,6 +8,7 @@ import { Notice } from "@/components/workspace/forms/ui";
 import { CredentialsStep, IdentityStep } from "@/components/workspace/onboarding/steps-a";
 import { ConsentStep, PracticeStep, ReviewStep, ServicesStep } from "@/components/workspace/onboarding/steps-b";
 import { getViewer } from "@/lib/auth/session";
+import { findSignupForEmail } from "@/lib/practitioner-signup-link";
 import {
   currentPolicyVersions,
   listAuthorityOptions,
@@ -21,7 +22,7 @@ import {
   searchBranches,
 } from "@/lib/workspace/catalog";
 import { resolveWorkspacePractitioner } from "@/lib/workspace/context";
-import { validateForSubmission } from "@/lib/workspace/draft";
+import { recommendedAdditions, validateForSubmission } from "@/lib/workspace/draft";
 import { readMessage } from "@/lib/workspace/forms";
 import { onboardingStatus, STEPS, type Step } from "@/lib/workspace/onboarding";
 import { listAssociations, listCredentials } from "@/lib/workspace/queries";
@@ -51,6 +52,8 @@ async function Wizard({ searchParams }: { searchParams: PageProps<"/workspace/on
   const step: Step = practitioner ? requested : "identity";
   const msg = readMessage(sp);
   const status = practitioner ? await onboardingStatus(practitioner.id) : null;
+  // Paid-landing-page sign-ups land here after the email code: pre-fill from what they already told us.
+  const signup = await findSignupForEmail(viewer.email);
 
   return (
     <div className="min-h-screen bg-background">
@@ -65,7 +68,7 @@ async function Wizard({ searchParams }: { searchParams: PageProps<"/workspace/on
       </header>
       <div className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="text-2xl font-semibold tracking-tight">{practitioner ? `Set up ${practitioner.displayName}` : "Create your professional profile"}</h1>
-        <p className="mt-1 text-sm text-muted">Each step saves on its own. Come back any time; nothing is public until a reviewer approves your submission.</p>
+        <p className="mt-1 text-sm text-muted">About 5 minutes. You need your qualification and council/IAP registration number. Each step saves on its own; nothing is public until our team approves it.</p>
         <ol className="mt-5 flex flex-wrap gap-2 text-sm" aria-label="Steps">
           {STEPS.map((s, i) => {
             const enabled = Boolean(practitioner) || s === "identity";
@@ -83,19 +86,20 @@ async function Wizard({ searchParams }: { searchParams: PageProps<"/workspace/on
           })}
         </ol>
         <Notice ok={msg.ok} error={msg.error} />
-        <StepBody step={step} practitionerId={practitioner?.id ?? null} listingStatus={practitioner?.listingStatus ?? "draft"} sp={sp} status={status} />
+        <StepBody step={step} practitionerId={practitioner?.id ?? null} listingStatus={practitioner?.listingStatus ?? "draft"} sp={sp} status={status} signup={signup} />
       </div>
     </div>
   );
 }
 
-async function StepBody({ step, practitionerId, listingStatus, sp, status }: { step: Step; practitionerId: string | null; listingStatus: string; sp: Record<string, string | string[] | undefined>; status: Awaited<ReturnType<typeof onboardingStatus>> | null }) {
+async function StepBody({ step, practitionerId, listingStatus, sp, status, signup }: { step: Step; practitionerId: string | null; listingStatus: string; sp: Record<string, string | string[] | undefined>; status: Awaited<ReturnType<typeof onboardingStatus>> | null; signup: Awaited<ReturnType<typeof findSignupForEmail>> }) {
   if (step === "identity" || !practitionerId || !status) {
-    return <IdentityStep identity={status?.draft.identity} isNew={!practitionerId} />;
+    const identity = status?.draft.identity ?? (signup ? { displayName: signup.fullName, designation: "Physiotherapist", headline: "", gender: "unset" as const } : undefined);
+    return <IdentityStep identity={identity} isNew={!practitionerId} />;
   }
   if (step === "credentials") {
     const [credentials, authorities] = await Promise.all([listCredentials(practitionerId), listAuthorityOptions()]);
-    return <CredentialsStep qualifications={status.draft.qualifications ?? []} credentials={credentials} authorities={authorities} />;
+    return <CredentialsStep qualifications={status.draft.qualifications ?? []} credentials={credentials} authorities={authorities} registrationHint={signup?.registrationNumber ?? null} />;
   }
   if (step === "practice") {
     const clinicQ = typeof sp.clinicQ === "string" ? sp.clinicQ.trim() : "";
@@ -109,7 +113,7 @@ async function StepBody({ step, practitionerId, listingStatus, sp, status }: { s
       stateId ? listCityOptions(stateId) : Promise.resolve([]),
       cityId ? listLocalityOptions(cityId) : Promise.resolve([]),
     ]);
-    return <PracticeStep associations={associations} hits={hits} query={{ clinicQ, clinicCity, stateId, cityId }} states={states} cities={cities} localities={localities} />;
+    return <PracticeStep associations={associations} hits={hits} query={{ clinicQ, clinicCity, stateId, cityId }} states={states} cities={cities} localities={localities} homeVisitsFirst={signup?.practiceType === "home_visits"} />;
   }
   if (step === "services") {
     const [associations, services, defaults, specialties, languages] = await Promise.all([listAssociations(practitionerId), listServiceOptions(), offeringDefaults(), listSpecialtyOptions(), listLanguageOptions()]);
@@ -120,5 +124,5 @@ async function StepBody({ step, practitionerId, listingStatus, sp, status }: { s
     return <ConsentStep versions={versions} done={status.consents} />;
   }
   const gaps = validateForSubmission(status.draft, status);
-  return <ReviewStep status={status} gaps={gaps} listingStatus={listingStatus} />;
+  return <ReviewStep status={status} gaps={gaps} recommended={recommendedAdditions(status.draft, status)} listingStatus={listingStatus} />;
 }

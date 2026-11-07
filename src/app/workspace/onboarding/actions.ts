@@ -3,7 +3,8 @@
 import { ApiError } from "@/lib/api";
 import { canManagePractitioner, getViewer } from "@/lib/auth/session";
 import { currentPolicyVersions, offeringDefaults } from "@/lib/workspace/catalog";
-import { createClinicBranch, joinBranch } from "@/lib/workspace/clinics";
+import { advanceSignup } from "@/lib/practitioner-signup-link";
+import { createClinicBranch, createServiceArea, joinBranch, ServiceAreaSchema } from "@/lib/workspace/clinics";
 import { resolveWorkspacePractitioner } from "@/lib/workspace/context";
 import { addCredential, removeCredential } from "@/lib/workspace/credentials";
 import { IdentitySchema, saveDraftSection, submitDraft, validateForSubmission } from "@/lib/workspace/draft";
@@ -35,7 +36,10 @@ export async function saveIdentity(formData: FormData) {
     const { viewer, practitioner } = await actor();
     const identity = IdentitySchema.parse({ displayName: str(formData, "displayName"), designation: opt(formData, "designation") ?? "", headline: opt(formData, "headline") ?? "", gender: opt(formData, "gender") ?? "unset" });
     if (practitioner) await saveDraftSection(practitioner.id, viewer.userId, "identity", identity);
-    else await createPractitioner(viewer.userId, identity);
+    else {
+      await createPractitioner(viewer.userId, { ...identity, designation: identity.designation || "Physiotherapist" });
+      await advanceSignup(viewer.email, "onboarding").catch(() => {});
+    }
     done(page(nextStep("identity")), { ok: "Identity saved" });
   } catch (err) {
     failTo(back, err);
@@ -98,6 +102,27 @@ export async function createClinic(formData: FormData) {
     const input = parseClinicForm(formData);
     await createClinicBranch(p.id, viewer.userId, input);
     done(back, { ok: input.newLocalityName && !input.localityId ? "Clinic added. Your new locality has been sent for review." : "Clinic added. The association is pending approval." });
+  } catch (err) {
+    failTo(back, err);
+  }
+}
+
+/** Home-visit / online coverage instead of a clinic address (LOC-04). */
+export async function addServiceArea(formData: FormData) {
+  const back = page("practice");
+  try {
+    const { viewer, practitioner } = await actor();
+    const p = requirePractitioner(practitioner);
+    const localityId = opt(formData, "localityId");
+    const input = ServiceAreaSchema.parse({
+      stateId: str(formData, "stateId"),
+      cityId: str(formData, "cityId"),
+      localityId: localityId && localityId !== "__new" ? localityId : undefined,
+      newLocalityName: localityId === "__new" || !localityId ? opt(formData, "newLocalityName") : undefined,
+      pinCode: str(formData, "pinCode"),
+    });
+    await createServiceArea(p.id, viewer.userId, input);
+    done(back, { ok: input.newLocalityName && !input.localityId ? "Home-visit area added. Your new locality has been sent for review." : "Home-visit area added" });
   } catch (err) {
     failTo(back, err);
   }

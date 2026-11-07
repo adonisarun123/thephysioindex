@@ -51,7 +51,7 @@ export type PractitionerCard = {
   bestBranch: {
     id: string;
     clinicName: string;
-    clinicPath: string;
+    clinicPath: string | null;
     localityName: string;
     cityName: string;
     stateName: string;
@@ -157,8 +157,9 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
       SELECT
         p.id AS practitioner_id,
         b.id AS branch_id,
-        c.name AS clinic_name,
-        '/clinics/' || c.slug || '-' || c.public_id AS clinic_path,
+        -- Home-visit coverage has no public clinic or address (LOC-04, DAT-02).
+        CASE WHEN b.kind = 'service_area' THEN 'Home visits' ELSE c.name END AS clinic_name,
+        CASE WHEN b.kind = 'service_area' THEN NULL ELSE '/clinics/' || c.slug || '-' || c.public_id END AS clinic_path,
         l.name AS locality_name,
         ci.name AS city_name,
         st.name AS state_name,
@@ -219,7 +220,7 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
     practitioner_id: string;
     branch_id: string;
     clinic_name: string;
-    clinic_path: string;
+    clinic_path: string | null;
     locality_name: string;
     city_name: string;
     state_name: string;
@@ -326,10 +327,12 @@ export type PublicProfile = {
   portfolio: { kind: string; title: string; issuer: string | null; itemDate: string | null; url: string | null; description: string | null }[];
   branches: {
     id: string;
+    /** 'service_area' = home-visit/online coverage: no address, PIN, coordinates or clinic page. */
+    kind: "clinic" | "service_area";
     name: string;
     clinicName: string;
-    clinicPath: string;
-    addressLine1: string;
+    clinicPath: string | null;
+    addressLine1: string | null;
     addressLine2: string | null;
     localityName: string;
     localitySlug: string;
@@ -337,7 +340,7 @@ export type PublicProfile = {
     citySlug: string;
     stateName: string;
     stateSlug: string;
-    pinCode: string;
+    pinCode: string | null;
     latitude: number | null;
     longitude: number | null;
     publicPhone: string | null;
@@ -391,11 +394,19 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
       (SELECT coalesce(json_agg(json_build_object('kind', pi.kind, 'title', pi.title, 'issuer', pi.issuer, 'itemDate', pi.item_date, 'url', pi.url, 'description', pi.description) ORDER BY pi.sort_order, pi.item_date DESC NULLS LAST), '[]'::json)
         FROM portfolio_items pi WHERE pi.practitioner_id = p.id) AS portfolio,
       (SELECT coalesce(json_agg(json_build_object(
-          'id', b.id, 'name', b.name, 'clinicName', c.name, 'clinicPath', '/clinics/' || c.slug || '-' || c.public_id,
-          'addressLine1', b.address_line1, 'addressLine2', b.address_line2,
+          'id', b.id, 'kind', b.kind,
+          -- A service area exposes only locality and city; address, PIN, map pin and clinic page stay private (LOC-04, DAT-02).
+          'name', CASE WHEN b.kind = 'service_area' THEN 'Home visits' ELSE b.name END,
+          'clinicName', CASE WHEN b.kind = 'service_area' THEN 'Home visits' ELSE c.name END,
+          'clinicPath', CASE WHEN b.kind = 'service_area' THEN NULL ELSE '/clinics/' || c.slug || '-' || c.public_id END,
+          'addressLine1', CASE WHEN b.kind = 'service_area' THEN NULL ELSE b.address_line1 END,
+          'addressLine2', CASE WHEN b.kind = 'service_area' THEN NULL ELSE b.address_line2 END,
           'localityName', l.name, 'localitySlug', l.slug, 'cityName', ci.name, 'citySlug', ci.slug, 'stateName', st.name, 'stateSlug', st.slug,
-          'pinCode', b.pin_code, 'latitude', b.latitude, 'longitude', b.longitude, 'publicPhone',
-            CASE WHEN coalesce((pb.public_contact_rules ->> 'showBranchPhone')::boolean, true) THEN b.public_phone END,
+          'pinCode', CASE WHEN b.kind = 'service_area' THEN NULL ELSE b.pin_code END,
+          'latitude', CASE WHEN b.kind = 'service_area' THEN NULL ELSE b.latitude END,
+          'longitude', CASE WHEN b.kind = 'service_area' THEN NULL ELSE b.longitude END,
+          'publicPhone',
+            CASE WHEN b.kind <> 'service_area' AND coalesce((pb.public_contact_rules ->> 'showBranchPhone')::boolean, true) THEN b.public_phone END,
           'directions', b.directions, 'accessibility', b.accessibility, 'facilities', b.facilities,
           'bookable', pb.bookable,
           'offerings', (SELECT coalesce(json_agg(json_build_object(
@@ -529,8 +540,11 @@ export async function getPublicClinic(publicId: string): Promise<PublicClinic | 
               ${showTestAccounts() ? sql`` : sql`AND p.is_test_account = false`})
         ) ORDER BY b.name), '[]'::json)
         FROM branches b JOIN localities l ON l.id = b.locality_id JOIN cities ci ON ci.id = b.city_id JOIN states st ON st.id = b.state_id
-        WHERE b.clinic_id = c.id AND b.status = 'published') AS branches
-    FROM clinics c WHERE c.public_id = ${publicId} AND c.status = 'published' LIMIT 1
+        WHERE b.clinic_id = c.id AND b.status = 'published' AND b.kind = 'clinic') AS branches
+    FROM clinics c WHERE c.public_id = ${publicId} AND c.status = 'published'
+      -- A home-visit practice record has no public clinic page (LOC-04).
+      AND EXISTS (SELECT 1 FROM branches b WHERE b.clinic_id = c.id AND b.status = 'published' AND b.kind = 'clinic')
+    LIMIT 1
   `);
   const r = res.rows[0];
   if (!r) return null;
@@ -575,7 +589,9 @@ export async function countPublishedPractitioners(): Promise<number> {
 export async function listPublishedClinicPaths() {
   const res = await db().execute<{ path: string; updated_at: Date }>(sql`
     SELECT '/clinics/' || c.slug || '-' || c.public_id AS path, c.updated_at
-    FROM clinics c WHERE c.status = 'published' ORDER BY c.public_id
+    FROM clinics c WHERE c.status = 'published'
+      AND EXISTS (SELECT 1 FROM branches b WHERE b.clinic_id = c.id AND b.status = 'published' AND b.kind = 'clinic')
+    ORDER BY c.public_id
   `);
   return res.rows;
 }

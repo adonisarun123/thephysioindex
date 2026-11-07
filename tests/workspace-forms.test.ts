@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { paiseToRupeesInput, plainText, rows, rupeesToPaise, withQuery } from "@/lib/workspace/forms";
-import { validateForSubmission } from "@/lib/workspace/draft";
+import { recommendedAdditions, validateForSubmission } from "@/lib/workspace/draft";
 
 describe("rupeesToPaise (OFR-02: integer paise, no floats)", () => {
   it("parses whole rupees and paise exactly", () => {
@@ -46,9 +46,18 @@ describe("withQuery", () => {
 });
 
 describe("validateForSubmission (PRO-03)", () => {
-  it("lists every missing mandatory field", () => {
+  it("lists every missing mandatory field of the lean core", () => {
     const gaps = validateForSubmission({}, { credentialCount: 0, branchCount: 0, offeringCount: 0, consents: false });
-    expect(gaps.length).toBeGreaterThanOrEqual(8);
+    expect(gaps).toHaveLength(5);
+  });
+  it("lets a home-visit physio submit without fees, about, specialties or languages", () => {
+    const draft = {
+      identity: { displayName: "Boopathi Saran", designation: "", headline: "", gender: "unset" as const },
+      qualifications: [{ degree: "BPT", institution: "Tamil Nadu Dr. M.G.R. Medical University", completionYear: 2022, inProgress: false }],
+    };
+    const extra = { credentialCount: 1, branchCount: 1, offeringCount: 0, consents: true };
+    expect(validateForSubmission(draft, extra)).toEqual([]);
+    expect(recommendedAdditions(draft, extra)).toHaveLength(4);
   });
   it("passes a complete draft", () => {
     const gaps = validateForSubmission(

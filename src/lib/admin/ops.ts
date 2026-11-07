@@ -22,7 +22,9 @@ export async function listEnquiries(f: { status?: string; page?: number; pageSiz
   return { rows: rows.rows, total: Number(total.rows[0]?.n ?? 0), counts: Object.fromEntries(counts.rows.map((r) => [r.status, Number(r.n)])) };
 }
 
-export type SignupRow = { id: string; reference: string; fullName: string; mobile: string; email: string | null; city: string; practiceType: string; registrationNumber: string | null; attribution: Record<string, string>; status: string; notes: string | null; createdAt: Date };
+export type SignupRow = { id: string; reference: string; fullName: string; mobile: string; email: string | null; city: string; practiceType: string; registrationNumber: string | null; attribution: Record<string, string>; status: string; notes: string | null; createdAt: Date;
+  /** What actually exists for this email: no account, account only, or the profile's listing status. */
+  profileStatus: string | null; profileId: string | null };
 
 /** Practitioner sign-up leads from the paid landing page. Not listings (DIR-14). */
 export async function listSignups(f: { status?: string; page?: number; pageSize?: number }): Promise<{ rows: SignupRow[]; total: number; counts: Record<string, number> }> {
@@ -32,7 +34,14 @@ export async function listSignups(f: { status?: string; page?: number; pageSize?
   const [rows, total, counts] = await Promise.all([
     db().execute<SignupRow>(sql`
       SELECT s.id, s.reference, s.full_name AS "fullName", s.mobile, s.email, s.city, s.practice_type AS "practiceType", s.registration_number AS "registrationNumber",
-        s.attribution, s.status, s.notes, s.created_at AS "createdAt"
+        s.attribution, s.status, s.notes, s.created_at AS "createdAt",
+        -- Derived, not hand-set: the account that signed in with this email and its profile.
+        (SELECT coalesce(p.listing_status::text, 'account_only') FROM auth."user" au JOIN users u ON u.auth_subject = au.id::text
+           LEFT JOIN practitioners p ON p.owner_user_id = u.id AND p.listing_status <> 'archived'
+          WHERE lower(au.email) = s.email ORDER BY p.created_at DESC NULLS LAST LIMIT 1) AS "profileStatus",
+        (SELECT p.id FROM auth."user" au JOIN users u ON u.auth_subject = au.id::text
+           JOIN practitioners p ON p.owner_user_id = u.id AND p.listing_status <> 'archived'
+          WHERE lower(au.email) = s.email ORDER BY p.created_at DESC LIMIT 1) AS "profileId"
       FROM practitioner_signups s ${whereSql} ORDER BY s.created_at DESC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`),
     db().execute<{ n: string }>(sql`SELECT count(*) AS n FROM practitioner_signups s ${whereSql}`),
     db().execute<{ status: string; n: string }>(sql`SELECT status, count(*) AS n FROM practitioner_signups GROUP BY 1`),

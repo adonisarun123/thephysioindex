@@ -34,7 +34,7 @@ async function List({ searchParams }: { searchParams: PageProps<"/admin/signups"
     <>
       <Notice sp={sp} />
       <Tabs current={status} items={[...SIGNUP_STATUSES.map((s) => ({ href: `/admin/signups?status=${s}`, label: s.replace("_", " "), count: counts[s] ?? 0 })), { href: "/admin/signups?status=all", label: "all" }]} />
-      <Table head={["Received", "Name", "Contact", "City", "Practice", "Reg. no.", "Source", "Status", "Update"]}>
+      <Table head={["Received", "Name", "Contact", "City", "Practice", "Reg. no.", "Source", "Profile", "Status", "Update"]}>
         {rows.length === 0 ? <Empty>No sign-ups.</Empty> : null}
         {rows.map((r) => (
           <tr key={r.id}>
@@ -48,6 +48,9 @@ async function List({ searchParams }: { searchParams: PageProps<"/admin/signups"
             <Td className="text-xs">{practiceTypeLabel(r.practiceType)}</Td>
             <Td className="text-xs">{r.registrationNumber ?? "—"}</Td>
             <Td className="text-xs">{[r.attribution.utm_source, r.attribution.utm_campaign, r.attribution.utm_term].filter(Boolean).join(" · ") || (r.attribution.gclid ? "google ads" : "direct")}</Td>
+            <Td className="text-xs">
+              {r.profileStatus == null ? <span className="text-muted">not signed in</span> : r.profileStatus === "account_only" ? "signed in, no profile" : r.profileId ? <a href={`/admin/practitioners/${r.profileId}`} className="underline">{r.profileStatus.replace("_", " ")}</a> : r.profileStatus}
+            </Td>
             <Td><Pill status={r.status} label={r.status.replace("_", " ")} />{r.notes ? <div className="mt-1 max-w-xs whitespace-pre-wrap text-xs text-muted">{r.notes}</div> : null}</Td>
             <Td>
               <form action={signupStatusAction} className="grid gap-1">

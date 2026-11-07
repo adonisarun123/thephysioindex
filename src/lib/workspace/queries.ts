@@ -40,13 +40,15 @@ export type AssociationRow = {
   activeFrom: string;
   activeTo: string | null;
   showBranchPhone: boolean;
+  /** 'service_area' = home-visit/online coverage; no public address. */
+  kind: "clinic" | "service_area";
   offerings: OfferingRow[];
 };
 
 export async function listAssociations(practitionerId: string): Promise<AssociationRow[]> {
   const res = await db().execute<Record<string, unknown>>(sql`
     SELECT pb.id, pb.branch_id, b.name AS branch_name, c.id AS clinic_id, c.name AS clinic_name,
-      concat_ws(', ', b.address_line1, b.address_line2) AS address, l.name AS locality_name, ci.name AS city_name, st.name AS state_name, b.pin_code, b.public_phone,
+      concat_ws(', ', b.address_line1, b.address_line2) AS address, l.name AS locality_name, ci.name AS city_name, st.name AS state_name, b.pin_code, b.public_phone, b.kind,
       pb.state::text AS state, pb.bookable, pb.active_from, pb.active_to,
       coalesce((pb.public_contact_rules ->> 'showBranchPhone')::boolean, true) AS show_branch_phone,
       (SELECT coalesce(json_agg(json_build_object(
@@ -74,6 +76,7 @@ export async function listAssociations(practitionerId: string): Promise<Associat
     stateName: r.state_name as string,
     pinCode: r.pin_code as string,
     branchPhone: (r.public_phone as string | null) ?? null,
+    kind: r.kind === "service_area" ? "service_area" : "clinic",
     state: r.state as string,
     bookable: Boolean(r.bookable),
     activeFrom: String(r.active_from),
