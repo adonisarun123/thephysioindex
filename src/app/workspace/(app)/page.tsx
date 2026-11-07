@@ -2,14 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { CompletionMeter } from "@/components/workspace/completion-meter";
 import { Empty, Notice, PageHeader, Section, StatePill } from "@/components/workspace/forms/ui";
 import { statusLabel } from "@/components/workspace/workspace-shell";
 import { latestCase } from "@/lib/workspace/cases";
 import { requireWorkspace } from "@/lib/workspace/context";
 import { readMessage } from "@/lib/workspace/forms";
 import { formatIst } from "@/lib/workspace/calendar";
-import { onboardingStatus, pendingActions } from "@/lib/workspace/onboarding";
+import { completionPercent, profileChecklist } from "@/lib/workspace/completion";
+import { onboardingStatus } from "@/lib/workspace/onboarding";
 import { listBookings } from "@/lib/workspace/queries";
+import { submitForReview } from "./profile/actions";
 
 export const metadata: Metadata = { title: "Workspace overview" };
 
@@ -26,24 +29,14 @@ async function Overview({ searchParams }: { searchParams: PageProps<"/workspace"
   const sp = await searchParams;
   const { practitioner: p } = await requireWorkspace("/workspace");
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const [actions, status, review, todays] = await Promise.all([
-    pendingActions(p.id, p.listingStatus),
+  const [status, review, todays] = await Promise.all([
     onboardingStatus(p.id),
     latestCase(p.id, ["listing_review", "profile_change"]),
     listBookings(p.id, { from: today, to: today, status: "confirmed" }),
   ]);
-  const checklist = [
-    ["Identity", status.completed.identity],
-    ["About section", (status.draft.about?.length ?? 0) >= 100],
-    ["Qualifications", (status.draft.qualifications?.length ?? 0) > 0],
-    ["Credentials", status.credentialCount > 0],
-    ["Areas of practice", (status.draft.specialties?.length ?? 0) > 0],
-    ["Languages", (status.draft.languages?.length ?? 0) > 0],
-    ["Clinic", status.branchCount > 0],
-    ["Services and fees", status.offeringCount > 0],
-    ["Consent", status.consents],
-  ] as const;
-  const completion = Math.round((checklist.filter(([, ok]) => ok).length / checklist.length) * 100);
+  const items = profileChecklist(status.draft, status);
+  const complete = completionPercent(items) === 100;
+  const canSubmit = complete && status.versionState === "draft" && ["draft", "rejected", "changes_requested"].includes(p.listingStatus);
   const msg = readMessage(sp);
 
   return (
@@ -82,39 +75,17 @@ async function Overview({ searchParams }: { searchParams: PageProps<"/workspace"
             )}
           </Section>
 
-          <Section title="Pending actions" lede="What still stands between you and a bookable, published profile.">
-            {actions.length === 0 ? (
-              <Empty>Nothing pending. Keep your calendar current and watch for review feedback here.</Empty>
-            ) : (
-              <ul className="grid gap-2 text-sm">
-                {actions.map((a) => (
-                  <li key={a.href + a.label} className="flex items-center justify-between gap-3 rounded-[var(--r-sm)] border border-line p-3">
-                    <span>{a.label}</span>
-                    <Link href={a.href} className="btn btn-quiet py-1 text-xs">Do it</Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <Section title="Profile completion" lede={p.listingStatus === "published" ? "Keep your profile complete; changes are reviewed before they go live." : "Reach 100%, submit, and once we verify your registration patients can book you."}>
+            <CompletionMeter items={items} />
+            {canSubmit ? (
+              <form action={submitForReview} className="mt-4">
+                <button type="submit" className="btn btn-primary">Submit for verification</button>
+              </form>
+            ) : null}
           </Section>
         </div>
 
         <aside>
-          <Section title="Profile completion" lede={`${completion}% complete`}>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-valuenow={completion} aria-valuemin={0} aria-valuemax={100}>
-              <div className="h-full bg-brand" style={{ width: `${completion}%` }} />
-            </div>
-            <ul className="mt-3 grid gap-1.5 text-sm">
-              {checklist.map(([label, ok]) => (
-                <li key={label} className="flex items-center justify-between">
-                  <span>{label}</span>
-                  <span className={ok ? "text-brand-ink" : "text-muted"}>{ok ? "Done" : "To do"}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-xs text-muted">
-              <Link href="/workspace/profile" className="underline">Edit profile</Link> · <Link href="/workspace/onboarding?step=review" className="underline">Submission checklist</Link>
-            </p>
-          </Section>
           <Section title="Recent metrics" lede="Profile views arrive with analytics.">
             <p className="text-sm text-muted">Views, confirmed bookings and completed visits will appear here once the analytics pipeline is live. Booking counts are already on <Link href="/workspace/reports" className="underline">Reports</Link>.</p>
           </Section>

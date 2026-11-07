@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { connection } from "next/server";
+import { PhysioRegistration } from "@/components/auth/physio-registration";
 import { GoogleAdsTag } from "@/components/google-ads-tag";
-import { ATTRIBUTION_KEYS, PRACTICE_TYPES } from "@/lib/practitioner-signups";
-import { readMessage } from "@/lib/workspace/forms";
-import { submitPhysioSignup } from "./actions";
+import { getViewer } from "@/lib/auth/session";
+import { ATTRIBUTION_KEYS } from "@/lib/practitioner-signups";
+import { listAuthorityOptions, listStateOptions } from "@/lib/workspace/catalog";
 
 /*
  * Paid-acquisition landing page for physiotherapists. Kept out of the index
@@ -50,9 +52,9 @@ export default function Page({ searchParams }: PageProps<"/for-physiotherapists/
             </ul>
           </div>
           <div id="register" className="card p-5 text-foreground sm:p-6">
-            <h2 className="text-xl font-semibold tracking-tight">Register your interest</h2>
-            <p className="mt-1 text-sm text-muted">Takes under a minute. Then build your profile straight away — or we call you to help.</p>
-            <Suspense fallback={<SignupForm attribution={{}} />}>
+            <h2 className="text-xl font-semibold tracking-tight">Register free</h2>
+            <p className="mt-1 text-sm text-muted">About two minutes. Keep your registration number handy. Nothing is public until we have verified it.</p>
+            <Suspense fallback={<p className="mt-5 text-sm text-muted">Loading the form…</p>}>
               <FormWithParams searchParams={searchParams} />
             </Suspense>
           </div>
@@ -63,9 +65,9 @@ export default function Page({ searchParams }: PageProps<"/for-physiotherapists/
         <h2 className="text-2xl font-semibold tracking-tight">How joining works</h2>
         <ol className="mt-6 grid gap-4 sm:grid-cols-3">
           {[
-            ["1. Register here", "Name, mobile, email and city. No documents needed at this step."],
-            ["2. Build your profile", "Enter the code we email you and add your qualification, registration and where you see patients. About 5 minutes; our team can call to help."],
-            ["3. Go live", "Once we have checked your registration, your profile appears in city and locality searches."],
+            ["1. Register here", "Name, email, mobile, qualification, registration number and where you see patients. We verify your email with a code."],
+            ["2. Complete your profile", "Your profile is created straight away. Add your About section, services, fees and hours until it shows 100%."],
+            ["3. Get verified and booked", "At 100% you submit it. Once we have checked your registration, your profile goes live and patients can book you."],
           ].map(([t, d]) => (
             <li key={t} className="card p-5">
               <p className="font-semibold">{t}</p>
@@ -102,66 +104,14 @@ export default function Page({ searchParams }: PageProps<"/for-physiotherapists/
 }
 
 async function FormWithParams({ searchParams }: { searchParams: PageProps<"/for-physiotherapists/join">["searchParams"] }) {
+  await connection();
   const sp = await searchParams;
   const attribution: Record<string, string> = {};
   for (const k of ATTRIBUTION_KEYS) {
     const v = sp[k];
     if (typeof v === "string" && v) attribution[k] = v.slice(0, 200);
   }
-  return <SignupForm attribution={attribution} error={readMessage(sp).error} />;
-}
-
-function SignupForm({ attribution, error }: { attribution: Record<string, string>; error?: string }) {
-  return (
-    <form action={submitPhysioSignup} className="mt-5 grid gap-4">
-      {error ? (
-        <p role="alert" className="rounded-[var(--r-ctl)] bg-alert-soft p-3 text-sm text-alert">
-          {error}
-        </p>
-      ) : null}
-      {Object.entries(attribution).map(([k, v]) => (
-        <input key={k} type="hidden" name={k} value={v} />
-      ))}
-      <div className="hidden" aria-hidden>
-        <label htmlFor="website">Leave this empty</label>
-        <input id="website" name="website" tabIndex={-1} autoComplete="off" />
-      </div>
-      <div>
-        <label className="label" htmlFor="fullName">Full name</label>
-        <input id="fullName" name="fullName" className="input" required minLength={2} maxLength={80} autoComplete="name" placeholder="Dr. Priya Sharma (PT)" />
-      </div>
-      <div>
-        <label className="label" htmlFor="mobile">Mobile number</label>
-        <input id="mobile" name="mobile" className="input" required inputMode="tel" autoComplete="tel" maxLength={20} placeholder="10-digit mobile" />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="label" htmlFor="city">City</label>
-          <input id="city" name="city" className="input" required minLength={2} maxLength={80} autoComplete="address-level2" />
-        </div>
-        <div>
-          <label className="label" htmlFor="email">Email</label>
-          <input id="email" name="email" type="email" className="input" required maxLength={120} autoComplete="email" inputMode="email" placeholder="Your sign-in code goes here" />
-        </div>
-      </div>
-      <div>
-        <label className="label" htmlFor="practiceType">How do you practise?</label>
-        <select id="practiceType" name="practiceType" className="input" required defaultValue="">
-          <option value="" disabled>Choose one</option>
-          {PRACTICE_TYPES.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="label" htmlFor="registrationNumber">Council registration or IAP number <span className="font-normal text-muted">(optional)</span></label>
-        <input id="registrationNumber" name="registrationNumber" className="input" maxLength={60} />
-      </div>
-      <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" name="consent" className="mt-1" required />
-        <span>The Physio Index may call, SMS or WhatsApp me about listing my practice. <Link href="/policies/privacy" className="underline">Privacy notice</Link>.</span>
-      </label>
-      <button type="submit" className="btn btn-primary w-full">Register free</button>
-    </form>
-  );
+  const [viewer, states, authorities] = await Promise.all([getViewer(), listStateOptions(), listAuthorityOptions()]);
+  const signedInEmail = viewer && viewer.kind !== "staff" ? viewer.email : null;
+  return <PhysioRegistration states={states} authorities={authorities} attribution={attribution} signedInEmail={signedInEmail} />;
 }

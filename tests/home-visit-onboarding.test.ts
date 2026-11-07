@@ -71,9 +71,18 @@ describe.skipIf(!TEST_DB)("home-visit onboarding on PostgreSQL", () => {
     const versions = await catalog.currentPolicyVersions();
     await onboarding.recordConsents(pid, u.id, { providerTerms: versions.providerTerms, privacyNotice: versions.privacyNotice });
 
+    // Submission is gated at 100% of the completion checklist.
+    const before = await onboarding.onboardingStatus(pid);
+    expect(draft.validateForSubmission(before.draft, before).length).toBeGreaterThan(0);
+    const [spec] = await catalog.listSpecialtyOptions();
+    const [lang] = await catalog.listLanguageOptions();
+    await draft.saveDraftSection(pid, u.id, "about", "TEST home-visit physiotherapist covering this area for post-operative and elderly rehabilitation at home.");
+    await draft.saveDraftSection(pid, u.id, "specialties", [{ specialtyId: spec.id, isPrimary: true }]);
+    await draft.saveDraftSection(pid, u.id, "languages", [lang.id]);
     const status = await onboarding.onboardingStatus(pid);
+    expect(status.clinicCount).toBe(0);
     expect(draft.validateForSubmission(status.draft, status)).toEqual([]);
-    expect(draft.recommendedAdditions(status.draft, status).length).toBeGreaterThan(0);
+    expect(draft.recommendedAdditions(status.draft).length).toBeGreaterThan(0);
 
     const caseId = await draft.submitDraft(pid, u.id, { published: false });
     await decideCase(await moderator(), { caseId, decision: "approved", reason: "TEST lean approval" });

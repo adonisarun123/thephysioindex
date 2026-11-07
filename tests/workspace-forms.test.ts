@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { paiseToRupeesInput, plainText, rows, rupeesToPaise, withQuery } from "@/lib/workspace/forms";
+import { completionPercent, profileChecklist } from "@/lib/workspace/completion";
 import { recommendedAdditions, validateForSubmission } from "@/lib/workspace/draft";
 
 describe("rupeesToPaise (OFR-02: integer paise, no floats)", () => {
@@ -45,19 +46,29 @@ describe("withQuery", () => {
   });
 });
 
-describe("validateForSubmission (PRO-03)", () => {
-  it("lists every missing mandatory field of the lean core", () => {
-    const gaps = validateForSubmission({}, { credentialCount: 0, branchCount: 0, offeringCount: 0, consents: false });
-    expect(gaps).toHaveLength(5);
+describe("validateForSubmission (PRO-03, 100% gate)", () => {
+  const none = { credentialCount: 0, branchCount: 0, clinicCount: 0, offeringCount: 0, availabilityRuleCount: 0, consents: false };
+  const registered = {
+    identity: { displayName: "Boopathi Saran", designation: "", headline: "", gender: "unset" as const },
+    qualifications: [{ degree: "BPT", institution: "Tamil Nadu Dr. M.G.R. Medical University", completionYear: 2022, inProgress: false }],
+  };
+  it("lists every open checklist item", () => {
+    expect(validateForSubmission({}, none)).toHaveLength(8);
   });
-  it("lets a home-visit physio submit without fees, about, specialties or languages", () => {
-    const draft = {
-      identity: { displayName: "Boopathi Saran", designation: "", headline: "", gender: "unset" as const },
-      qualifications: [{ degree: "BPT", institution: "Tamil Nadu Dr. M.G.R. Medical University", completionYear: 2022, inProgress: false }],
-    };
-    const extra = { credentialCount: 1, branchCount: 1, offeringCount: 0, consents: true };
-    expect(validateForSubmission(draft, extra)).toEqual([]);
-    expect(recommendedAdditions(draft, extra)).toHaveLength(4);
+  it("blocks a freshly registered profile until it is complete", () => {
+    const extra = { ...none, credentialCount: 1, branchCount: 1, consents: true };
+    const items = profileChecklist(registered, extra);
+    expect(completionPercent(items)).toBe(50);
+    expect(validateForSubmission(registered, extra)).toHaveLength(4);
+    expect(recommendedAdditions(registered).length).toBeGreaterThan(0);
+  });
+  it("asks for weekly hours only when there is a clinic", () => {
+    const full = { ...registered, about: "a".repeat(120), specialties: [{ specialtyId: "00000000-0000-4000-8000-000000000001", isPrimary: true }], languages: ["00000000-0000-4000-8000-000000000002"] };
+    const homeVisit = { credentialCount: 1, branchCount: 1, clinicCount: 0, offeringCount: 1, availabilityRuleCount: 0, consents: true };
+    expect(validateForSubmission(full, homeVisit)).toEqual([]);
+    expect(completionPercent(profileChecklist(full, homeVisit))).toBe(100);
+    expect(validateForSubmission(full, { ...homeVisit, clinicCount: 1 })).toEqual(["Publish your weekly clinic hours"]);
+    expect(validateForSubmission(full, { ...homeVisit, clinicCount: 1, availabilityRuleCount: 2 })).toEqual([]);
   });
   it("passes a complete draft", () => {
     const gaps = validateForSubmission(
@@ -68,7 +79,7 @@ describe("validateForSubmission (PRO-03)", () => {
         specialties: [{ specialtyId: "00000000-0000-4000-8000-000000000001", isPrimary: true }],
         languages: ["00000000-0000-4000-8000-000000000002"],
       },
-      { credentialCount: 1, branchCount: 1, offeringCount: 1, consents: true },
+      { credentialCount: 1, branchCount: 1, clinicCount: 0, offeringCount: 1, availabilityRuleCount: 0, consents: true },
     );
     expect(gaps).toEqual([]);
   });
