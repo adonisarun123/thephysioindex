@@ -18,6 +18,9 @@ const credentials = await import("@/lib/workspace/credentials");
 const directory = await import("@/lib/directory");
 const catalog = await import("@/lib/workspace/catalog");
 const { decideCase } = await import("@/lib/admin/decisions");
+const offerings = await import("@/lib/workspace/offerings");
+const { publishOwnApprovedLocations } = await import("@/lib/admin/locations");
+const { withTransaction } = await import("@/db/client");
 type Viewer = Parameters<typeof decideCase>[0];
 
 const code = (e: unknown) => (e instanceof ApiError ? e.code : `UNEXPECTED: ${(e as Error)?.message}`);
@@ -53,7 +56,19 @@ describe.skipIf(!TEST_DB)("home-visit onboarding on PostgreSQL", () => {
     if (other[0]) expect(code(await clinics.joinBranch(other[0].id, u.id, branchId).catch((e) => e))).toBe("NOT_FOUND");
     expect((await catalog.searchBranches("TEST Home Visit")).some((h) => h.branchId === branchId)).toBe(false);
 
-    const versions = await (await import("@/lib/workspace/catalog")).currentPolicyVersions();
+    // A service at a home-visit area is a home visit (enquiry-only in R1), never an instant clinic booking.
+    const [assoc] = await q<{ id: string }>(`SELECT id FROM practitioner_branches WHERE branch_id = $1`, [branchId]);
+    const [svc] = await catalog.listServiceOptions();
+    const defaults = await catalog.offeringDefaults();
+    const offeringId = await offerings.createOffering(pid, u.id, assoc.id, {
+      serviceId: svc.id, displayName: "TEST Home assessment", description: "", basePricePaise: 80000, taxPaise: 0, extraChargesPaise: 0, priceNote: "",
+      durationMin: defaults.durationMin, intervalMin: defaults.intervalMin, bufferBeforeMin: defaults.bufferBeforeMin, bufferAfterMin: defaults.bufferAfterMin,
+      minNoticeMin: defaults.minNoticeMin, bookingHorizonDays: defaults.horizonDays,
+    });
+    const [off] = await q<{ mode: string }>(`SELECT mode::text AS mode FROM offerings WHERE id = $1`, [offeringId]);
+    expect(off.mode).toBe("home_visit");
+
+    const versions = await catalog.currentPolicyVersions();
     await onboarding.recordConsents(pid, u.id, { providerTerms: versions.providerTerms, privacyNotice: versions.privacyNotice });
 
     const status = await onboarding.onboardingStatus(pid);
@@ -79,5 +94,16 @@ describe.skipIf(!TEST_DB)("home-visit onboarding on PostgreSQL", () => {
 
     const [s] = await q<{ status: string }>(`SELECT status FROM practitioner_signups WHERE email = $1`, [email]);
     expect(s.status).toBe("onboarded");
+
+    // An area added after going live publishes when its association is approved (LOC-02).
+    const [loc2] = await q<{ locality_id: string }>(`SELECT id AS locality_id FROM localities WHERE city_id = $1 AND id <> $2 AND status = 'active' LIMIT 1`, [loc.city_id, loc.locality_id]);
+    if (loc2) {
+      const later = await clinics.createServiceArea(pid, u.id, { stateId: loc.state_id, cityId: loc.city_id, localityId: loc2.locality_id, pinCode: "600053" });
+      await q(`UPDATE practitioner_branches SET state = 'approved' WHERE id = $1`, [later.associationId]);
+      const res = await withTransaction((_c, tx) => publishOwnApprovedLocations(tx, pid, later.associationId));
+      expect(res.branches).toBe(1);
+      const [b2] = await q<{ status: string }>(`SELECT status FROM branches WHERE id = $1`, [later.branchId]);
+      expect(b2.status).toBe("published");
+    }
   });
 });

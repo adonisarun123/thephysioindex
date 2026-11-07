@@ -3,13 +3,14 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { ClinicFields, OfferingFields } from "@/components/workspace/forms/fields";
+import { PlaceCascade } from "@/components/workspace/forms/place-cascade";
 import { Empty, Field, Notice, PageHeader, Section, StatePill } from "@/components/workspace/forms/ui";
 import { formatPaise } from "@/lib/money";
 import { listCityOptions, listLocalityOptions, listServiceOptions, listStateOptions, offeringDefaults, searchBranches } from "@/lib/workspace/catalog";
 import { requireWorkspace } from "@/lib/workspace/context";
 import { readMessage } from "@/lib/workspace/forms";
 import { listAssociations, type AssociationRow } from "@/lib/workspace/queries";
-import { addOfferingAction, contactRulesAction, createClinicAction, endAssociationAction, joinBranchAction, reviseOfferingAction, toggleOfferingAction } from "./actions";
+import { addOfferingAction, contactRulesAction, createClinicAction, createServiceAreaAction, endAssociationAction, joinBranchAction, reviseOfferingAction, toggleOfferingAction } from "./actions";
 
 export const metadata: Metadata = { title: "Clinics and services" };
 
@@ -47,7 +48,7 @@ async function Clinics({ searchParams }: { searchParams: PageProps<"/workspace/c
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Clinics and services" lede="Where you practise and what you offer. Associations and clinic details are approved by our team; offerings are yours to manage within platform bounds." action={<a href="#add" className="btn btn-secondary py-2 text-sm">Add a clinic</a>} />
+      <PageHeader title="Clinics and services" lede="Where you see patients — clinics or home-visit areas — and what you offer. Associations and clinic details are approved by our team; offerings are yours to manage within platform bounds." action={<a href="#add" className="btn btn-secondary py-2 text-sm">Add a clinic</a>} />
       <Notice ok={msg.ok} error={msg.error} />
 
       {editing ? (
@@ -60,7 +61,7 @@ async function Clinics({ searchParams }: { searchParams: PageProps<"/workspace/c
         </form>
       ) : null}
 
-      {associations.length === 0 ? <Section title="Your clinics"><Empty>No clinic yet. Join an existing clinic or add a new one below.</Empty></Section> : associations.map((a) => <Association key={a.id} a={a} services={services} defaults={defaults} />)}
+      {associations.length === 0 ? <Section title="Your clinics"><Empty>No clinic or home-visit area yet. Add one below.</Empty></Section> : associations.map((a) => <Association key={a.id} a={a} services={services} defaults={defaults} />)}
 
       <Section id="add" title="Join an existing clinic" lede="Search by clinic name so we do not create duplicates (LOC-02).">
         <form method="get" action={PAGE} className="grid gap-3 sm:grid-cols-[2fr_1fr_auto] sm:items-end">
@@ -91,6 +92,18 @@ async function Clinics({ searchParams }: { searchParams: PageProps<"/workspace/c
           <div className="mt-5"><button type="submit" className="btn btn-primary">Add clinic</button></div>
         </Section>
       </form>
+
+      <form action={createServiceAreaAction}>
+        <Section id="home-visits" title="Add a home-visit area" lede="For home visits or online sessions. Patients see the locality, never your address or PIN code. Reviewed before it is published (LOC-04).">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <PlaceCascade idPrefix="sa-" states={states} cities={cities} localities={localities} selected={{ stateId, cityId }} reloadAction={`${PAGE}#home-visits`} />
+            <Field label="PIN code of the area" htmlFor="sa-pinCode" hint="Six digits. Kept private.">
+              <input id="sa-pinCode" name="pinCode" className="input" inputMode="numeric" pattern="[1-9][0-9]{5}" required maxLength={6} />
+            </Field>
+          </div>
+          <div className="mt-5"><button type="submit" className="btn btn-primary">Add home-visit area</button></div>
+        </Section>
+      </form>
     </div>
   );
 }
@@ -100,8 +113,8 @@ function Association({ a, services, defaults }: { a: AssociationRow; services: A
   return (
     <Section
       id={`assoc-${a.id}`}
-      title={`${a.clinicName}${a.branchName !== a.clinicName ? ` — ${a.branchName}` : ""}`}
-      lede={`${a.address}, ${a.localityName}, ${a.cityName} ${a.pinCode} · since ${a.activeFrom}${a.activeTo ? ` · ended ${a.activeTo}` : ""}`}
+      title={a.kind === "service_area" ? `Home visits — ${a.localityName}` : `${a.clinicName}${a.branchName !== a.clinicName ? ` — ${a.branchName}` : ""}`}
+      lede={`${a.kind === "service_area" ? `${a.localityName}, ${a.cityName} (PIN ${a.pinCode}, private)` : `${a.address}, ${a.localityName}, ${a.cityName} ${a.pinCode}`} · since ${a.activeFrom}${a.activeTo ? ` · ended ${a.activeTo}` : ""}`}
       aside={<StatePill state={a.state} />}
     >
       {a.state === "pending" ? <p className="mb-3 text-sm text-muted">Waiting for approval. You can set up services now; they publish with the association (LOC-03).</p> : null}

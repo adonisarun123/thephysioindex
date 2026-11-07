@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { hasRole, type Viewer } from "@/lib/auth/session";
 import { kickDispatch } from "@/lib/messaging/kick";
+import { publishOwnApprovedLocations } from "./locations";
 import { slugify, normaliseAlias } from "@/lib/slug";
 import { textArray } from "@/lib/sql";
 import {
@@ -169,25 +170,14 @@ async function decideProfile(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput
         // publication with every association still pending would list nowhere (LOC-02).
         const assoc = await tx.execute(sql`UPDATE practitioner_branches SET state = 'approved', approved_by_user_id = ${v.userId}
           WHERE practitioner_id = ${pv.practitioner_id} AND state = 'pending' AND active_to IS NULL RETURNING id`);
-        // Clinics and home-visit areas this practitioner created are still 'draft'; search and
-        // location pages show only published ones, so an approved listing would otherwise list nowhere.
-        // Only records the practitioner's owner created and that no one else is attached to.
-        const br = await tx.execute(sql`UPDATE branches b SET status = 'published'
-          FROM practitioner_branches pb, clinics c, practitioners p
-          WHERE pb.branch_id = b.id AND c.id = b.clinic_id AND p.id = pb.practitioner_id
-            AND pb.practitioner_id = ${pv.practitioner_id} AND pb.state = 'approved' AND pb.active_to IS NULL
-            AND b.status = 'draft' AND c.owner_user_id = p.owner_user_id
-          RETURNING b.id, b.clinic_id`);
-        const clinicIds = [...new Set(br.rows.map((r) => (r as { clinic_id: string }).clinic_id))];
-        if (clinicIds.length) {
-          await tx.execute(sql`UPDATE clinics SET status = 'published' WHERE id = ANY(${`{${clinicIds.join(",")}}`}::uuid[]) AND status = 'draft'`);
-        }
+        // Clinics and home-visit areas this practitioner created are still 'draft'; publish them.
+        const published = await publishOwnApprovedLocations(tx, pv.practitioner_id);
         await tx.execute(sql`UPDATE practitioner_signups s SET status = 'onboarded'
           FROM practitioners p JOIN users u ON u.id = p.owner_user_id JOIN auth."user" au ON au.id::text = u.auth_subject
           WHERE p.id = ${pv.practitioner_id} AND s.email = lower(au.email) AND s.status IN ('new','contacted','onboarding')`);
         if (assoc.rowCount) {
-          await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "practitioner.branch.approve", objectType: "practitioner", objectId: pv.practitioner_id, reason: input.reason, changedFields: { associations: assoc.rows.map((r) => (r as { id: string }).id), branchesPublished: br.rowCount ?? 0, clinicsPublished: clinicIds.length, via: "listing_review" }, correlationId: c.id }, tx);
-          return `Version ${pv.version} approved and published; ${assoc.rowCount} location(s) approved and ${br.rowCount ?? 0} published`;
+          await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: "practitioner.branch.approve", objectType: "practitioner", objectId: pv.practitioner_id, reason: input.reason, changedFields: { associations: assoc.rows.map((r) => (r as { id: string }).id), branchesPublished: published.branches, clinicsPublished: published.clinics, via: "listing_review" }, correlationId: c.id }, tx);
+          return `Version ${pv.version} approved and published; ${assoc.rowCount} location(s) approved and ${published.branches} published`;
         }
       }
       return `Version ${pv.version} approved and published`;

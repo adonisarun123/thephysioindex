@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { requireStaff } from "@/lib/auth/session";
 import { openCase } from "@/lib/admin/cases";
+import { publishOwnApprovedLocations } from "@/lib/admin/locations";
 import { decideCase } from "@/lib/admin/decisions";
 import { act, parseForm, requireRecent, zBool, zOpt, zOptDate, zReason, zReq, zUuid } from "@/lib/admin/forms";
 import { findUserByContact } from "@/lib/admin/practitioners";
@@ -135,7 +136,11 @@ export async function associationAction(fd: FormData) {
       await lockPractitioner(tx, practitionerId);
       const cur = await tx.execute<{ state: string; branch_id: string }>(sql`SELECT state, branch_id FROM practitioner_branches WHERE id = ${associationId} AND practitioner_id = ${practitionerId} FOR UPDATE`);
       if (!cur.rows[0]) throw new ApiError("NOT_FOUND", "Association not found");
-      if (op === "approve") await tx.execute(sql`UPDATE practitioner_branches SET state = 'approved', approved_by_user_id = ${v.userId} WHERE id = ${associationId} AND state = 'pending'`);
+      if (op === "approve") {
+        await tx.execute(sql`UPDATE practitioner_branches SET state = 'approved', approved_by_user_id = ${v.userId} WHERE id = ${associationId} AND state = 'pending'`);
+        // A clinic or home-visit area the practitioner added after going live is still 'draft'.
+        await publishOwnApprovedLocations(tx, practitionerId, associationId);
+      }
       if (op === "reject") await tx.execute(sql`UPDATE practitioner_branches SET state = 'rejected', ended_reason = ${reason} WHERE id = ${associationId} AND state = 'pending'`);
       if (op === "end") {
         await tx.execute(sql`UPDATE practitioner_branches SET state = 'ended', active_to = current_date, ended_reason = ${reason} WHERE id = ${associationId} AND state = 'approved'`);
