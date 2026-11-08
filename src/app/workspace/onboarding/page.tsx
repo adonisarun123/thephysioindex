@@ -36,7 +36,14 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
   await connection();
   const sp = await searchParams;
   const viewer = await getViewer();
-  if (!viewer) redirect(`/sign-in?as=practitioner&next=${encodeURIComponent("/workspace/onboarding")}`);
+  // Google Ads lands here (owner decision 8 Nov 2026). Visitors without a
+  // session are new prospects: send them to registration, keeping gclid/utm
+  // so the sign-up conversion on /join/thank-you is still attributed.
+  if (!viewer) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) if (typeof v === "string") qs.set(k, v);
+    redirect(`/for-physiotherapists/join${qs.size ? `?${qs}` : ""}`);
+  }
   const practitioner = await resolveWorkspacePractitioner(viewer);
   if (!practitioner) redirect("/for-physiotherapists/join#register");
 
