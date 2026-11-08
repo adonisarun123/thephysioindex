@@ -8,15 +8,7 @@ import { profileChecklist } from "./completion";
 import { getLatestVersion, type ProfileDraft } from "./draft";
 import { consentState, listAssociations, listCredentials } from "./queries";
 
-/** Creation wizard support (PRO-02, PRO-03). The practitioner row exists from step one so drafts are resumable. */
-
-export const STEPS = ["identity", "credentials", "practice", "services", "consent", "review"] as const;
-export type Step = (typeof STEPS)[number];
-
-export function nextStep(step: Step): Step {
-  const i = STEPS.indexOf(step);
-  return STEPS[Math.min(STEPS.length - 1, i + 1)];
-}
+/** Profile creation and status support (PRO-02, PRO-03). */
 
 export async function createPractitioner(ownerUserId: string, identity: NonNullable<ProfileDraft["identity"]>): Promise<string> {
   return withTransaction(async (_c, tx) => {
@@ -71,7 +63,6 @@ export type OnboardingStatus = {
   offeringCount: number;
   availabilityRuleCount: number;
   consents: boolean;
-  completed: Record<Step, boolean>;
 };
 
 export async function onboardingStatus(practitionerId: string): Promise<OnboardingStatus> {
@@ -95,14 +86,6 @@ export async function onboardingStatus(practitionerId: string): Promise<Onboardi
     offeringCount,
     availabilityRuleCount: Number(rules.rows[0]?.n ?? 0),
     consents: consentOk,
-    completed: {
-      identity: Boolean(draft.identity?.displayName),
-      credentials: creds.length > 0 && (draft.qualifications?.length ?? 0) > 0,
-      practice: live.length > 0,
-      services: offeringCount > 0,
-      consent: consentOk,
-      review: latest?.state === "submitted" || latest?.state === "approved",
-    },
   };
 }
 

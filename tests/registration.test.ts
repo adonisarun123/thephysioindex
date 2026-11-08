@@ -15,6 +15,8 @@ const { RegistrationSchema, registerPractitioner } = await import("@/lib/workspa
 const onboarding = await import("@/lib/workspace/onboarding");
 const draft = await import("@/lib/workspace/draft");
 const { profileChecklist, completionPercent } = await import("@/lib/workspace/completion");
+const { finishProfile } = await import("@/lib/workspace/finish");
+const catalog = await import("@/lib/workspace/catalog");
 
 const code = (e: unknown) => (e instanceof ApiError ? e.code : `UNEXPECTED: ${(e as Error)?.message}`);
 
@@ -116,5 +118,46 @@ describe.skipIf(!TEST_DB)("registration on PostgreSQL", () => {
     expect(code(await registerPractitioner(who, input(p, { stateId: other.id }), {}).catch((e) => e))).toBe("INVALID_INPUT");
     const rows = await q(`SELECT 1 FROM practitioners WHERE owner_user_id = $1`, [who.userId]);
     expect(rows).toHaveLength(0);
+  });
+
+  it("finishes a clinic profile on one screen: 44% → 100% → submitted for verification", async () => {
+    const who = await account("finish");
+    const p = await place();
+    const { practitionerId } = await registerPractitioner(who, input(p), {});
+    await q(`UPDATE practitioners SET is_test_account = true WHERE id = $1`, [practitionerId]);
+    const [spec] = await catalog.listSpecialtyOptions();
+    const langs = await catalog.listLanguageOptions();
+    const [svc] = await catalog.listServiceOptions();
+
+    const res = await finishProfile(practitionerId, who.userId, "draft", {
+      about: "TEST physiotherapist at a neighbourhood clinic. I assess each patient carefully and build a clear treatment and home exercise plan.",
+      primarySpecialtyId: spec.id,
+      languageIds: [langs[0].id],
+      service: { serviceId: svc.id, displayName: svc.label, feePaise: 60000 },
+      hours: { weekdays: [1, 2, 3, 4, 5, 6], localStart: "10:00", localEnd: "19:00" },
+      submit: true,
+    });
+    expect(res).toEqual({ percent: 100, submitted: true, gaps: [] });
+    const [v] = await q<{ state: string }>(`SELECT state::text FROM profile_versions WHERE practitioner_id = $1 ORDER BY version DESC LIMIT 1`, [practitionerId]);
+    expect(v.state).not.toBe("draft");
+    const rules = await q(`SELECT 1 FROM availability_rules r JOIN calendar_resources cr ON cr.id = r.resource_id WHERE cr.practitioner_id = $1`, [practitionerId]);
+    expect(rules).toHaveLength(6);
+    const [o] = await q<{ base_price_paise: number }>(`SELECT ov.base_price_paise FROM offerings o JOIN offering_versions ov ON ov.id = o.current_version_id WHERE o.practitioner_id = $1`, [practitionerId]);
+    expect(Number(o.base_price_paise)).toBe(60000);
+
+    // Running it again changes nothing and does not submit twice.
+    const again = await finishProfile(practitionerId, who.userId, "draft", { submit: true });
+    expect(again.submitted).toBe(false);
+  });
+
+  it("saves partial input and reports what is left instead of submitting", async () => {
+    const who = await account("partial");
+    const p = await place();
+    const { practitionerId } = await registerPractitioner(who, input(p, { practiceMode: "home_visits", clinicName: undefined, addressLine1: undefined }), {});
+    await q(`UPDATE practitioners SET is_test_account = true WHERE id = $1`, [practitionerId]);
+    const res = await finishProfile(practitionerId, who.userId, "draft", { about: "x".repeat(120), submit: true });
+    expect(res.submitted).toBe(false);
+    expect(res.percent).toBe(63);
+    expect(res.gaps).toHaveLength(3);
   });
 });
