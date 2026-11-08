@@ -3,128 +3,199 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { Logo } from "@/components/logo";
+import { CompletionMeter } from "@/components/workspace/completion-meter";
 import { Notice } from "@/components/workspace/forms/ui";
-import { CredentialsStep, IdentityStep } from "@/components/workspace/onboarding/steps-a";
-import { ConsentStep, PracticeStep, ReviewStep, ServicesStep } from "@/components/workspace/onboarding/steps-b";
 import { getViewer } from "@/lib/auth/session";
-import { findSignupForEmail } from "@/lib/practitioner-signup-link";
-import {
-  currentPolicyVersions,
-  listAuthorityOptions,
-  listCityOptions,
-  listLanguageOptions,
-  listLocalityOptions,
-  listServiceOptions,
-  listSpecialtyOptions,
-  listStateOptions,
-  offeringDefaults,
-  searchBranches,
-} from "@/lib/workspace/catalog";
+import { listAuthorityOptions, listLanguageOptions, listServiceOptions, listSpecialtyOptions } from "@/lib/workspace/catalog";
+import { WEEKDAYS } from "@/lib/workspace/calendar";
+import { ABOUT_MIN_CHARS, completionPercent, profileChecklist } from "@/lib/workspace/completion";
 import { resolveWorkspacePractitioner } from "@/lib/workspace/context";
-import { recommendedAdditions, validateForSubmission } from "@/lib/workspace/draft";
 import { readMessage } from "@/lib/workspace/forms";
-import { onboardingStatus, STEPS, type Step } from "@/lib/workspace/onboarding";
-import { listAssociations, listCredentials } from "@/lib/workspace/queries";
+import { onboardingStatus } from "@/lib/workspace/onboarding";
+import { listAssociations } from "@/lib/workspace/queries";
+import { DEGREES } from "@/lib/workspace/registration-options";
+import { finishProfileAction } from "./actions";
 
-export const metadata: Metadata = { title: "Create your profile", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Finish your profile", robots: { index: false, follow: false } };
 
-const LABELS: Record<Step, string> = { identity: "Identity", credentials: "Credentials", practice: "Practice", services: "Services and expertise", consent: "Consent", review: "Review" };
-
-/** Creation wizard (PRO-02): autosaving steps, resumable. Lives outside the workspace shell so a viewer without a profile is not redirected in a loop. */
+/**
+ * One-screen profile completion (PRO-03; owner decision 8 Nov 2026: the whole
+ * onboarding in under two minutes). Shows only what the 100% checklist still
+ * needs, pre-filled with sensible defaults, and submits for verification in
+ * the same click. Lives outside the workspace shell so it reads as one task.
+ */
 export default function Page({ searchParams }: PageProps<"/workspace/onboarding">) {
   return (
     <Suspense fallback={<div className="mx-auto max-w-3xl px-4 py-12 text-muted">Loading…</div>}>
-      <Wizard searchParams={searchParams} />
+      <Finish searchParams={searchParams} />
     </Suspense>
   );
 }
 
-const UUID = /^[0-9a-f-]{36}$/i;
-
-async function Wizard({ searchParams }: { searchParams: PageProps<"/workspace/onboarding">["searchParams"] }) {
+async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/onboarding">["searchParams"] }) {
   await connection();
   const sp = await searchParams;
   const viewer = await getViewer();
   if (!viewer) redirect(`/sign-in?as=practitioner&next=${encodeURIComponent("/workspace/onboarding")}`);
   const practitioner = await resolveWorkspacePractitioner(viewer);
-  // New profiles start from the one-screen registration (owner decision 7 Nov 2026).
   if (!practitioner) redirect("/for-physiotherapists/join#register");
-  const requested = typeof sp.step === "string" && (STEPS as readonly string[]).includes(sp.step) ? (sp.step as Step) : "identity";
-  const step: Step = practitioner ? requested : "identity";
+
+  const status = await onboardingStatus(practitioner.id);
+  const items = profileChecklist(status.draft, status);
+  const open = new Set(items.filter((i) => !i.done).map((i) => i.key));
   const msg = readMessage(sp);
-  const status = practitioner ? await onboardingStatus(practitioner.id) : null;
-  // Paid-landing-page sign-ups land here after the email code: pre-fill from what they already told us.
-  const signup = await findSignupForEmail(viewer.email);
+  const awaitingReview = status.versionState !== "draft" && status.versionState !== null;
+
+  const [specialties, languages, services, authorities, associations] = await Promise.all([
+    open.has("specialty") ? listSpecialtyOptions() : Promise.resolve([]),
+    open.has("languages") ? listLanguageOptions() : Promise.resolve([]),
+    open.has("services") ? listServiceOptions() : Promise.resolve([]),
+    open.has("registration") ? listAuthorityOptions() : Promise.resolve([]),
+    listAssociations(practitioner.id),
+  ]);
+  const live = associations.filter((a) => a.state !== "ended" && a.state !== "rejected");
+  const place = live[0] ? (live[0].kind === "service_area" ? `offering home visits in ${live[0].localityName}, ${live[0].cityName}` : `at ${live[0].clinicName}, ${live[0].localityName}, ${live[0].cityName}`) : "";
+  const name = status.draft.identity?.displayName ?? practitioner.displayName;
+  const degree = status.draft.qualifications?.[0]?.degree;
+  const aboutStarter =
+    status.draft.about?.trim() ||
+    `I am ${name}${degree ? `, a ${degree}` : ", a"} physiotherapist${place ? ` ${place}` : ""}. I assess each patient carefully, explain what is causing the problem, and build a clear treatment and home exercise plan to get them moving again.`;
+  const english = languages.find((l) => l.label.toLowerCase() === "english");
+  const chosenLanguages = new Set(status.draft.languages?.length ? status.draft.languages : english ? [english.id] : []);
+  const defaultService = services.find((s) => s.kind === "initial_assessment") ?? services[0];
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <Link href="/" aria-label="The Physio Index home"><Logo /></Link>
-          <nav className="flex items-center gap-3 text-sm">
-            {practitioner ? <Link href="/workspace" className="underline">Workspace</Link> : <Link href="/claim" className="underline">Claim an existing profile instead</Link>}
-            <form action="/sign-out" method="post"><button className="underline" type="submit">Sign out</button></form>
-          </nav>
+      <main className="mx-auto max-w-3xl px-4 py-8">
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">Finish your profile</h1>
+          <Link href="/workspace" className="text-sm underline">Skip to workspace</Link>
         </div>
-      </header>
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight">{practitioner ? `Set up ${practitioner.displayName}` : "Create your professional profile"}</h1>
-        <p className="mt-1 text-sm text-muted">About 5 minutes. You need your qualification and council/IAP registration number. Each step saves on its own; nothing is public until our team approves it.</p>
-        <ol className="mt-5 flex flex-wrap gap-2 text-sm" aria-label="Steps">
-          {STEPS.map((s, i) => {
-            const enabled = Boolean(practitioner) || s === "identity";
-            const complete = status?.completed[s] ?? false;
-            const cls = s === step ? "bg-brand text-white" : complete ? "bg-brand-soft text-brand-ink" : "bg-surface-2 text-ink-2";
-            return (
-              <li key={s}>
-                {enabled ? (
-                  <Link href={`/workspace/onboarding?step=${s}`} aria-current={s === step ? "step" : undefined} className={`pill py-1 ${cls}`}>{i + 1}. {LABELS[s]}</Link>
-                ) : (
-                  <span className={`pill py-1 ${cls}`} aria-disabled="true">{i + 1}. {LABELS[s]}</span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-        <Notice ok={msg.ok} error={msg.error} />
-        <StepBody step={step} practitionerId={practitioner?.id ?? null} listingStatus={practitioner?.listingStatus ?? "draft"} sp={sp} status={status} signup={signup} />
-      </div>
+        <p className="mt-1 text-muted">One screen, about a minute. We have filled in sensible defaults: check them, add your fee, and submit.</p>
+        <Notice {...msg} />
+
+        <div className="card mt-6 p-5"><CompletionMeter items={items} compact submitted={awaitingReview} /></div>
+
+        {open.size === 0 || awaitingReview ? (
+          <div className="card mt-6 p-5">
+            <p className="font-medium">{awaitingReview ? "Your profile is with our team for verification." : "Your profile is complete."}</p>
+            <p className="mt-1 text-sm text-muted">{awaitingReview ? "We check your registration and email you once it is live." : "Submit it from your workspace."}</p>
+            <Link href="/workspace" className="btn btn-primary mt-4">Go to workspace</Link>
+          </div>
+        ) : (
+          <form action={finishProfileAction} className="card mt-6 grid gap-6 p-5">
+            {open.has("basics") ? (
+              <fieldset className="grid gap-3 sm:grid-cols-2">
+                <legend className="mb-2 font-semibold">Qualification</legend>
+                <select name="degree" className="input" required defaultValue="">
+                  <option value="" disabled>Choose one</option>
+                  {DEGREES.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <input name="institution" className="input" required minLength={2} maxLength={160} placeholder="College or university" aria-label="College or university" />
+              </fieldset>
+            ) : null}
+
+            {open.has("registration") ? (
+              <fieldset className="grid gap-3 sm:grid-cols-2">
+                <legend className="mb-2 font-semibold">Registration</legend>
+                <select name="authorityId" className="input" required defaultValue="" aria-label="Registered with">
+                  <option value="" disabled>State council or IAP</option>
+                  {authorities.map((a) => <option key={a.id} value={a.id}>{a.label}{a.jurisdiction ? ` — ${a.jurisdiction}` : ""}</option>)}
+                </select>
+                <input name="registrationNumber" className="input" required minLength={2} maxLength={60} placeholder="Registration number" aria-label="Registration number" />
+              </fieldset>
+            ) : null}
+
+            {open.has("about") ? (
+              <div>
+                <label className="label" htmlFor="about">About you</label>
+                <textarea id="about" name="about" className="input min-h-28" required minLength={ABOUT_MIN_CHARS} maxLength={3000} defaultValue={aboutStarter} />
+                <p className="mt-1 text-xs text-muted">A starting draft. Edit it to sound like you (at least {ABOUT_MIN_CHARS} characters).</p>
+              </div>
+            ) : null}
+
+            {open.has("specialty") || open.has("languages") ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {open.has("specialty") ? (
+                  <div>
+                    <label className="label" htmlFor="primarySpecialtyId">Main area of practice</label>
+                    <select id="primarySpecialtyId" name="primarySpecialtyId" className="input" required defaultValue="">
+                      <option value="" disabled>Choose one</option>
+                      {specialties.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                  </div>
+                ) : null}
+                {open.has("languages") ? (
+                  <fieldset>
+                    <legend className="label">Languages you consult in</legend>
+                    <input type="hidden" name="languagesShown" value="1" />
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      {languages.map((l) => (
+                        <label key={l.id} className="flex items-center gap-1.5">
+                          <input type="checkbox" name="languageIds" value={l.id} defaultChecked={chosenLanguages.has(l.id)} />
+                          {l.label}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                ) : null}
+              </div>
+            ) : null}
+
+            {open.has("services") ? (
+              <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+                <div>
+                  <label className="label" htmlFor="serviceId">Your main service</label>
+                  <select id="serviceId" name="serviceId" className="input" required defaultValue={defaultService?.id ?? ""}>
+                    {services.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                  <p className="mt-1 text-xs text-muted">Add more services later from your workspace.</p>
+                </div>
+                <div>
+                  <label className="label" htmlFor="feeRupees">Fee (₹)</label>
+                  <input id="feeRupees" name="feeRupees" className="input" required inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,2})?" placeholder="e.g. 600" />
+                </div>
+              </div>
+            ) : null}
+
+            {open.has("hours") ? (
+              <fieldset>
+                <legend className="label">Clinic hours (patients book within these)</legend>
+                <input type="hidden" name="hoursShown" value="1" />
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                    <label key={d} className="flex items-center gap-1.5">
+                      <input type="checkbox" name="weekdays" value={d} defaultChecked={d !== 0} />
+                      {WEEKDAYS[d].slice(0, 3)}
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-sm">
+                  <input type="time" name="localStart" className="input w-auto" defaultValue="10:00" required aria-label="Opens" />
+                  <span>to</span>
+                  <input type="time" name="localEnd" className="input w-auto" defaultValue="19:00" required aria-label="Closes" />
+                </div>
+                <p className="mt-1 text-xs text-muted">Fine-tune per day, add breaks or leave later in Calendar.</p>
+              </fieldset>
+            ) : null}
+
+            {open.has("consent") ? (
+              <label className="flex items-start gap-2 text-sm">
+                <input type="hidden" name="consentShown" value="1" />
+                <input type="checkbox" name="consent" className="mt-1" required />
+                <span>I accept the <Link href="/policies/provider-terms" className="underline" target="_blank">provider terms</Link> and agree that my profile is published once The Physio Index has verified my registration.</span>
+              </label>
+            ) : null}
+
+            {open.has("practice") ? (
+              <p className="text-sm">You also need to add <Link href="/workspace/clinics" className="underline">where you practise</Link> before you can submit.</p>
+            ) : null}
+
+            <button type="submit" className="btn btn-primary w-full">{completionPercent(items) === 100 ? "Submit for verification" : "Save and submit for verification"}</button>
+            <p className="-mt-3 text-center text-xs text-muted">Nothing is public until we have verified your registration.</p>
+          </form>
+        )}
+      </main>
     </div>
   );
-}
-
-async function StepBody({ step, practitionerId, listingStatus, sp, status, signup }: { step: Step; practitionerId: string | null; listingStatus: string; sp: Record<string, string | string[] | undefined>; status: Awaited<ReturnType<typeof onboardingStatus>> | null; signup: Awaited<ReturnType<typeof findSignupForEmail>> }) {
-  if (step === "identity" || !practitionerId || !status) {
-    const identity = status?.draft.identity ?? (signup ? { displayName: signup.fullName, designation: "Physiotherapist", headline: "", gender: "unset" as const } : undefined);
-    return <IdentityStep identity={identity} isNew={!practitionerId} />;
-  }
-  if (step === "credentials") {
-    const [credentials, authorities] = await Promise.all([listCredentials(practitionerId), listAuthorityOptions()]);
-    return <CredentialsStep qualifications={status.draft.qualifications ?? []} credentials={credentials} authorities={authorities} registrationHint={signup?.registrationNumber ?? null} />;
-  }
-  if (step === "practice") {
-    const clinicQ = typeof sp.clinicQ === "string" ? sp.clinicQ.trim() : "";
-    const clinicCity = typeof sp.clinicCity === "string" ? sp.clinicCity.trim() : "";
-    const stateId = typeof sp.stateId === "string" && UUID.test(sp.stateId) ? sp.stateId : undefined;
-    const cityId = typeof sp.cityId === "string" && UUID.test(sp.cityId) ? sp.cityId : undefined;
-    const [associations, hits, states, cities, localities] = await Promise.all([
-      listAssociations(practitionerId),
-      clinicQ ? searchBranches(clinicQ, clinicCity || undefined) : Promise.resolve([]),
-      listStateOptions(),
-      stateId ? listCityOptions(stateId) : Promise.resolve([]),
-      cityId ? listLocalityOptions(cityId) : Promise.resolve([]),
-    ]);
-    return <PracticeStep associations={associations} hits={hits} query={{ clinicQ, clinicCity, stateId, cityId }} states={states} cities={cities} localities={localities} homeVisitsFirst={signup?.practiceType === "home_visits"} />;
-  }
-  if (step === "services") {
-    const [associations, services, defaults, specialties, languages] = await Promise.all([listAssociations(practitionerId), listServiceOptions(), offeringDefaults(), listSpecialtyOptions(), listLanguageOptions()]);
-    return <ServicesStep associations={associations} services={services} defaults={defaults} draft={status.draft} specialties={specialties} languages={languages} />;
-  }
-  if (step === "consent") {
-    const versions = await currentPolicyVersions();
-    return <ConsentStep versions={versions} done={status.consents} />;
-  }
-  const gaps = validateForSubmission(status.draft, status);
-  return <ReviewStep status={status} gaps={gaps} recommended={recommendedAdditions(status.draft)} listingStatus={listingStatus} />;
 }

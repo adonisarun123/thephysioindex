@@ -25,20 +25,23 @@ export type CompletionItem = { key: string; label: string; todo: string; done: b
 
 export const ABOUT_MIN_CHARS = 100;
 
+/** Every open item is finished on one screen (owner decision 8 Nov 2026). */
+const FINISH = "/workspace/onboarding";
+
 export function profileChecklist(content: ProfileDraft, extra: CompletionExtra): CompletionItem[] {
   const name = content.identity?.displayName?.trim() ?? "";
   const items: CompletionItem[] = [
-    { key: "basics", label: "Name and qualification", todo: "Add your name and at least one qualification", done: name.length >= 2 && (content.qualifications?.length ?? 0) > 0, href: "/workspace/profile#identity" },
-    { key: "registration", label: "Registration number", todo: "Add your council registration or IAP number", done: extra.credentialCount > 0, href: "/workspace/profile#credentials" },
+    { key: "basics", label: "Name and qualification", todo: "Add your name and at least one qualification", done: name.length >= 2 && (content.qualifications?.length ?? 0) > 0, href: FINISH },
+    { key: "registration", label: "Registration number", todo: "Add your council registration or IAP number", done: extra.credentialCount > 0, href: FINISH },
     { key: "practice", label: "Where you practise", todo: "Add a clinic address or a home-visit area", done: extra.branchCount > 0, href: "/workspace/clinics" },
-    { key: "consent", label: "Terms and publication consent", todo: "Accept provider terms and publication consent", done: extra.consents, href: "/workspace/onboarding?step=consent" },
-    { key: "about", label: "About you", todo: `Write your About section (at least ${ABOUT_MIN_CHARS} characters)`, done: (content.about?.trim().length ?? 0) >= ABOUT_MIN_CHARS, href: "/workspace/profile#about" },
-    { key: "specialty", label: "Main area of practice", todo: "Choose your main area of practice", done: Boolean(content.specialties?.some((s) => s.isPrimary)), href: "/workspace/profile#expertise" },
-    { key: "languages", label: "Languages", todo: "Add the languages you consult in", done: (content.languages?.length ?? 0) > 0, href: "/workspace/profile#expertise" },
-    { key: "services", label: "Services and fees", todo: "Add at least one service with its fee", done: extra.offeringCount > 0, href: "/workspace/clinics" },
+    { key: "consent", label: "Terms and publication consent", todo: "Accept provider terms and publication consent", done: extra.consents, href: FINISH },
+    { key: "about", label: "About you", todo: `Write your About section (at least ${ABOUT_MIN_CHARS} characters)`, done: (content.about?.trim().length ?? 0) >= ABOUT_MIN_CHARS, href: FINISH },
+    { key: "specialty", label: "Main area of practice", todo: "Choose your main area of practice", done: Boolean(content.specialties?.some((s) => s.isPrimary)), href: FINISH },
+    { key: "languages", label: "Languages", todo: "Add the languages you consult in", done: (content.languages?.length ?? 0) > 0, href: FINISH },
+    { key: "services", label: "Services and fees", todo: "Add at least one service with its fee", done: extra.offeringCount > 0, href: FINISH },
   ];
   if (extra.clinicCount > 0) {
-    items.push({ key: "hours", label: "Weekly hours", todo: "Publish your weekly clinic hours", done: extra.availabilityRuleCount > 0, href: "/workspace/calendar" });
+    items.push({ key: "hours", label: "Weekly hours", todo: "Publish your weekly clinic hours", done: extra.availabilityRuleCount > 0, href: FINISH });
   }
   return items;
 }

@@ -67,7 +67,7 @@ async function ThankYou({ searchParams }: { searchParams: PageProps<"/for-physio
               <>
                 <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-brand-ink">Your profile</p>
                 <CompletionMeter items={items} compact />
-                <Link href="/workspace" className="btn btn-primary mt-5 w-full">Complete my profile</Link>
+                <Link href="/workspace/onboarding" className="btn btn-primary mt-5 w-full">Finish my profile (1 minute)</Link>
               </>
             ) : (
               <>

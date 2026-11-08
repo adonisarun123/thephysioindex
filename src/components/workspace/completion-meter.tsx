@@ -2,14 +2,14 @@ import Link from "next/link";
 import { completionPercent, type CompletionItem } from "@/lib/workspace/completion";
 
 /** Profile completion meter (PRO-03): one checklist, the same everywhere. */
-export function CompletionMeter({ items, compact = false }: { items: CompletionItem[]; compact?: boolean }) {
+export function CompletionMeter({ items, compact = false, submitted = false }: { items: CompletionItem[]; compact?: boolean; submitted?: boolean }) {
   const pct = completionPercent(items);
   const left = items.filter((i) => !i.done).length;
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-2xl font-semibold tracking-tight">{pct}%</p>
-        <p className="text-sm text-muted">{left === 0 ? "Complete. Submit for verification." : `${left} step${left === 1 ? "" : "s"} to go`}</p>
+        <p className="text-sm text-muted">{left === 0 ? (submitted ? "Complete. With our team for verification." : "Complete. Submit for verification.") : `${left} step${left === 1 ? "" : "s"} to go`}</p>
       </div>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label="Profile completion" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <div className="h-full bg-brand transition-[width]" style={{ width: `${pct}%` }} />

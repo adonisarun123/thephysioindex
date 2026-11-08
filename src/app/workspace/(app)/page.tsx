@@ -76,7 +76,10 @@ async function Overview({ searchParams }: { searchParams: PageProps<"/workspace"
           </Section>
 
           <Section title="Profile completion" lede={p.listingStatus === "published" ? "Keep your profile complete; changes are reviewed before they go live." : "Reach 100%, submit, and once we verify your registration patients can book you."}>
-            <CompletionMeter items={items} />
+            <CompletionMeter items={items} submitted={status.versionState !== "draft" && p.listingStatus !== "published"} />
+            {!complete ? (
+              <Link href="/workspace/onboarding" className="btn btn-primary mt-4">Finish your profile (1 minute)</Link>
+            ) : null}
             {canSubmit ? (
               <form action={submitForReview} className="mt-4">
                 <button type="submit" className="btn btn-primary">Submit for verification</button>
