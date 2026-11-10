@@ -106,7 +106,8 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
 
   // Display-only polish: names typed in all lower case ("vanshita budhi") read as unfinished. Never alters stored data or JSON-LD.
   const name = p.displayName === p.displayName.toLowerCase() ? titleCase(p.displayName) : p.displayName;
-  const firstName = name.split(/\s+/).find((w) => !/^dr\.?$/i.test(w)) ?? name;
+  // Short name for headings and FAQs: first real given name; skip titles, initials and the TEST marker used on preview data.
+  const firstName = name.split(/\s+/).find((w) => w.length > 2 && !w.endsWith(".") && !/^(dr|test)$/i.test(w)) ?? name;
   const modes = new Set<"clinic" | "home_visit" | "online">();
   for (const b of p.branches) {
     if (b.kind === "service_area") modes.add("home_visit");
@@ -194,12 +195,12 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
       <section aria-labelledby="profile-name" className="relative mt-4 overflow-hidden rounded-[var(--r-hero)] border border-line bg-surface" style={{ boxShadow: "var(--shadow-2)" }}>
         <div aria-hidden className="profile-hero-band h-28 md:h-40" />
         <div className="relative px-5 pb-6 md:px-8 md:pb-8">
-          <div className="-mt-14 flex flex-col gap-5 md:-mt-20 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="-mt-14 flex flex-col gap-5 md:-mt-20 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
               <div aria-hidden className="profile-avatar flex h-28 w-28 shrink-0 items-center justify-center rounded-[28px] text-4xl font-semibold tracking-tight text-white ring-[6px] ring-surface md:h-36 md:w-36 md:text-5xl">
                 {initials.toUpperCase()}
               </div>
-              <div className="min-w-0 sm:pb-1">
+              <div className="min-w-0 sm:pt-[68px] md:pt-[92px]">
                 <h1 id="profile-name" className="text-3xl font-bold leading-tight tracking-tight text-navy md:text-4xl">{name}</h1>
                 <p className="mt-1 text-base text-muted md:text-lg">
                   {p.designation ?? "Physiotherapist"}
@@ -220,7 +221,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 lg:pb-1">
+            <div className="flex flex-wrap gap-2 lg:pt-[92px]">
               <Link href={ctaHref} className="btn btn-primary profile-cta">
                 {p.bookable ? <CalendarIcon /> : null} {ctaLabel}
               </Link>
