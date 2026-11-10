@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { registerPhysio } from "@/app/for-physiotherapists/join/actions";
+import { captureLeadAction, registerPhysio } from "@/app/for-physiotherapists/join/actions";
+import { PRACTICE_TYPES } from "@/lib/practitioner-signups";
 import { PlaceCascade } from "@/components/workspace/forms/place-cascade";
 import { authClient } from "@/lib/auth/client";
 import type { AuthorityOption, Option } from "@/lib/workspace/catalog";
@@ -33,6 +34,65 @@ export function PhysioRegistration({ states, authorities, attribution, signedInE
   const [degree, setDegree] = useState<string>("");
   const clinic = PRACTICE_MODES.find((m) => m.value === mode)?.kind === "clinic";
   const homeVisits = mode === "home_visits";
+  // Quick lead step first for new visitors (owner decision 10 Nov 2026); signed-in practitioners go straight to the form.
+  const [stage, setStage] = useState<"lead" | "full">(signedInEmail ? "full" : "lead");
+  const [lead, setLead] = useState<{ reference: string; fullName: string; mobile: string } | null>(null);
+
+  async function onLead(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    const fd = new FormData(e.currentTarget);
+    const res = await captureLeadAction(fd);
+    setBusy(false);
+    if (!res.reference) return setError(res.error ?? "Something went wrong. Please try again.");
+    setLead({ reference: res.reference, fullName: String(fd.get("fullName") ?? ""), mobile: String(fd.get("mobile") ?? "") });
+    setStage("full");
+  }
+
+  if (stage === "lead") {
+    return (
+      <form onSubmit={(e) => void onLead(e)} className="mt-5 grid gap-4">
+        {Object.entries(attribution).map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+        <div className="hidden" aria-hidden>
+          <label htmlFor="lead-website">Leave this empty</label>
+          <input id="lead-website" name="website" tabIndex={-1} autoComplete="off" />
+        </div>
+        <div>
+          <label className="label" htmlFor="lead-name">Full name</label>
+          <input id="lead-name" name="fullName" className="input" required minLength={2} maxLength={120} autoComplete="name" placeholder="Priya Sharma" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="lead-mobile">WhatsApp number</label>
+            <input id="lead-mobile" name="mobile" className="input" required inputMode="tel" autoComplete="tel" maxLength={20} placeholder="10-digit mobile" />
+          </div>
+          <div>
+            <label className="label" htmlFor="lead-city">City</label>
+            <input id="lead-city" name="city" className="input" required minLength={2} maxLength={80} autoComplete="address-level2" placeholder="Bengaluru" />
+          </div>
+        </div>
+        <div>
+          <label className="label" htmlFor="lead-type">How do you practise?</label>
+          <select id="lead-type" name="practiceType" className="input" required defaultValue="">
+            <option value="" disabled>Choose one</option>
+            {PRACTICE_TYPES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+        </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="consentContact" className="mt-1" required defaultChecked />
+          <span>The Physio Index may call, SMS or WhatsApp me about listing my practice. <Link href="/policies/privacy" className="underline" target="_blank">Privacy notice</Link>.</span>
+        </label>
+        {error ? <p role="alert" className="rounded-[var(--r-ctl)] bg-alert-soft p-3 text-sm text-alert">{error}</p> : null}
+        <button type="submit" className="btn btn-primary w-full" disabled={busy}>{busy ? "Please wait…" : "Get started free"}</button>
+        <p className="text-center text-sm text-muted">
+          Takes 20 seconds. <button type="button" className="underline" onClick={() => setStage("full")}>Skip to full registration</button> · <Link href="/sign-in?as=practitioner" className="underline">Already registered? Sign in</Link>
+        </p>
+      </form>
+    );
+  }
 
   async function sendCode() {
     setBusy(true);
@@ -90,11 +150,19 @@ export function PhysioRegistration({ states, authorities, attribution, signedInE
         <label htmlFor="website">Leave this empty</label>
         <input id="website" name="website" tabIndex={-1} autoComplete="off" />
       </div>
+      {lead ? (
+        <>
+          <input type="hidden" name="leadRef" value={lead.reference} />
+          <p className="rounded-[var(--r-ctl)] bg-brand-soft p-3 text-sm">
+            Thanks, {lead.fullName.split(" ")[0]}. We have your number and will call you within a working day. Or finish now: the rest takes about two minutes with your registration number at hand.
+          </p>
+        </>
+      ) : null}
 
       <fieldset inert={locked} className={`grid gap-4 ${locked ? "opacity-60" : ""}`}>
         <div>
           <label className="label" htmlFor="fullName">Full name</label>
-          <input id="fullName" name="fullName" className="input" required minLength={2} maxLength={120} autoComplete="name" placeholder="Priya Sharma" />
+          <input id="fullName" name="fullName" className="input" required minLength={2} maxLength={120} autoComplete="name" placeholder="Priya Sharma" defaultValue={lead?.fullName} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -104,7 +172,7 @@ export function PhysioRegistration({ states, authorities, attribution, signedInE
           </div>
           <div>
             <label className="label" htmlFor="mobile">Mobile number</label>
-            <input id="mobile" name="mobile" className="input" required inputMode="tel" autoComplete="tel" maxLength={20} placeholder="10-digit mobile" />
+            <input id="mobile" name="mobile" className="input" required inputMode="tel" autoComplete="tel" maxLength={20} placeholder="10-digit mobile" defaultValue={lead?.mobile} />
           </div>
         </div>
 

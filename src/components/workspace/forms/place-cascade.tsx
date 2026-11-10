@@ -55,7 +55,7 @@ export function PlaceCascade({ states, cities: initialCities, localities: initia
           {localities.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
           <option value="__new">Propose a new locality…</option>
         </select>
-        <p className="mt-1 text-xs text-muted">Not listed? Choose “Propose a new locality” and type its name; it goes to review (DIR-08).</p>
+        <p className="mt-1 text-xs text-muted">Not listed? Choose “Propose a new locality” and type its name; our team adds it.</p>
       </div>
       <div>
         <label className="label" htmlFor={`${idPrefix}newLocalityName`}>New locality name (if proposing)</label>
