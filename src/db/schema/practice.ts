@@ -251,3 +251,29 @@ export const patientVisits = pgTable(
   },
   (t) => [index("patient_visits_patient_idx").on(t.patientId, t.visitOn)],
 );
+
+/** EMR-07: a file in the patient's record. The bytes live in private object storage; only the key is stored here. */
+export const patientDocuments = pgTable(
+  "patient_documents",
+  {
+    id: id(),
+    patientId: uuid("patient_id").notNull().references(() => practicePatients.id),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    objectKey: text("object_key").notNull(),
+    title: text("title").notNull(),
+    category: text("category").notNull(), // report | imaging | prescription | consent | other
+    docDate: date("doc_date"),
+    originalName: text("original_name"),
+    mime: text("mime").notNull(),
+    bytes: integer("bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    uploadedBy: uuid("uploaded_by").notNull().references(() => users.id),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("patient_documents_key_uq").on(t.objectKey),
+    index("patient_documents_patient_idx").on(t.patientId, t.createdAt),
+  ],
+);

@@ -12,7 +12,9 @@ import { istToday } from "@/lib/practice/exercise-plans";
 import { getPatient, listVisits, patientTimeline, recordsTermsAccepted, requirePatientAccess, VISIT_KINDS, type PatientAccess } from "@/lib/practice/patients";
 import { formatIst } from "@/lib/workspace/calendar";
 import { readMessage } from "@/lib/workspace/forms";
-import { addVisitAction, archivePatientAction, updatePatientAction, updateVisitAction } from "../actions";
+import { addVisitAction, archivePatientAction, deleteDocumentAction, updatePatientAction, updateVisitAction, uploadDocumentAction } from "../actions";
+import { DOCUMENT_CATEGORIES, documentsEnabled, listDocuments } from "@/lib/practice/documents";
+import { Field } from "@/components/workspace/forms/ui";
 
 export const metadata: Metadata = { title: "Patient record", robots: { index: false, follow: false } };
 
@@ -25,6 +27,7 @@ export default function Page({ params, searchParams }: PageProps<"/workspace/pat
 }
 
 const KIND = Object.fromEntries(VISIT_KINDS.map((k) => [k.key, k.label]));
+const CATEGORY: Record<string, string> = Object.fromEntries(DOCUMENT_CATEGORIES.map((c) => [c.key, c.label]));
 const fmt = (d: string) => new Date(`${d}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
 const ICON: Record<string, string> = { visit: "●", plan: "◆", package: "■", payment: "₹", session: "✓", document: "▤" };
 
@@ -43,7 +46,8 @@ async function PatientPage({ params, searchParams }: { params: PageProps<"/works
   if (!(await recordsTermsAccepted(p.id))) notFound();
   const patient = await getPatient(p.id, viewer.userId, id);
   if (!patient) notFound();
-  const [visits, timeline] = await Promise.all([listVisits(p.id, viewer.userId, id), patientTimeline(p.id, id)]);
+  const [visits, timeline, documents] = await Promise.all([listVisits(p.id, viewer.userId, id), patientTimeline(p.id, id), listDocuments(p.id, id)]);
+  const storageOn = documentsEnabled();
   const msg = readMessage(sp);
   const today = istToday();
   const first = patient.fullName.split(/\s+/)[0];
@@ -117,6 +121,43 @@ async function PatientPage({ params, searchParams }: { params: PageProps<"/works
         </div>
 
         <aside>
+          <Section title="Documents">
+            {documents.length === 0 ? <Empty>No documents yet.</Empty> : (
+              <ul className="grid gap-2 text-sm">
+                {documents.map((d) => (
+                  <li key={d.id} className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <a href={`/api/v1/patient-documents?id=${d.id}`} target="_blank" rel="noopener noreferrer" className="font-medium underline">{d.title}</a>
+                      <p className="text-xs text-muted">{CATEGORY[d.category]} · {d.docDate ? fmt(d.docDate) : formatIst(d.createdAt, { day: "numeric", month: "short", year: "numeric" })} · {Math.max(1, Math.round(d.bytes / 1024))} KB</p>
+                    </div>
+                    {access.canWrite ? (
+                      <form action={deleteDocumentAction}>
+                        <input type="hidden" name="patientId" value={patient.id} />
+                        <input type="hidden" name="documentId" value={d.id} />
+                        <button type="submit" className="text-xs underline" aria-label={`Delete ${d.title}`}>Delete</button>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {access.canWrite && !patient.archived ? (
+              storageOn ? (
+                <form action={uploadDocumentAction} className="mt-4 grid gap-3 border-t border-line pt-4">
+                  <input type="hidden" name="patientId" value={patient.id} />
+                  <Field label="File (PDF, JPG, PNG; up to 4 MB)" htmlFor="file"><input id="file" name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="text-sm" required /></Field>
+                  <Field label="Title" htmlFor="docTitle"><input id="docTitle" name="title" className="input" maxLength={120} placeholder="e.g. MRI right knee" /></Field>
+                  <Field label="Type" htmlFor="category">
+                    <select id="category" name="category" className="input" defaultValue="report">
+                      {DOCUMENT_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Document date (optional)" htmlFor="docDate"><input id="docDate" name="docDate" type="date" className="input" max={today} /></Field>
+                  <div><button type="submit" className="btn btn-secondary py-1.5 text-sm">Upload</button></div>
+                </form>
+              ) : <p className="mt-3 text-xs text-muted">Document storage is being set up. Uploads will appear here soon.</p>
+            ) : null}
+          </Section>
           <Section title="Timeline">
             {timeline.length === 0 ? <Empty>Nothing yet.</Empty> : (
               <ol className="relative grid gap-3 border-l border-line pl-4 text-sm">
@@ -124,7 +165,7 @@ async function PatientPage({ params, searchParams }: { params: PageProps<"/works
                   <li key={`${t.at}-${t.kind}-${i}`}>
                     <span className="absolute -left-[0.4rem] mt-0.5 text-xs text-brand" aria-hidden>{ICON[t.kind] ?? "•"}</span>
                     <p className="text-xs text-muted">{fmt(t.at)}</p>
-                    <p className="font-medium">{t.href ? <Link href={t.href.startsWith("#") ? t.href : t.href} className="underline-offset-2 hover:underline">{t.title}</Link> : t.title}</p>
+                    <p className="font-medium">{!t.href ? t.title : t.href.startsWith("/api/") ? <a href={t.href} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">{t.title}</a> : <Link href={t.href} className="underline-offset-2 hover:underline">{t.title}</Link>}</p>
                     {t.detail ? <p className="text-muted">{t.detail}</p> : null}
                   </li>
                 ))}
