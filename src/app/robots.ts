@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
   // Crawling is allowed so noindex directives can be processed (SEO-02);
   // private routes rely on authentication, not robots.
   return {
-    rules: [{ userAgent: "*", allow: "/", disallow: ["/api/", "/account", "/workspace", "/admin", "/book/"] }],
+    rules: [{ userAgent: "*", allow: "/", disallow: ["/api/", "/account", "/workspace", "/admin", "/book/", "/plan/"] }],
     sitemap: `${base}/sitemap.xml`,
   };
 }

@@ -22,6 +22,7 @@ import {
   SERVICES,
   SPECIALTIES,
 } from "../src/db/seed/master-data";
+import { EXERCISE_LIBRARY } from "../src/db/seed/exercises";
 import { normaliseAlias, slugify } from "../src/lib/slug";
 
 type AliasRow = typeof schema.geoAliases.$inferInsert;
@@ -195,6 +196,36 @@ async function main() {
       set: { subject: sql`excluded.subject`, body: sql`excluded.body` },
     });
   counts.notificationTemplates = NOTIFICATION_TEMPLATES.length;
+
+  // ---- HEP-01 starter exercise library (one statement; keyed on code) ----
+  await db
+    .insert(schema.exercises)
+    .values(
+      EXERCISE_LIBRARY.map((e) => ({
+        code: e.code,
+        name: e.name,
+        bodyRegion: e.bodyRegion,
+        instructions: e.instructions,
+        defaultSets: e.sets ?? null,
+        defaultReps: e.reps ?? null,
+        defaultHoldSeconds: e.holdSeconds ?? null,
+        defaultFrequency: e.frequency ?? null,
+      })),
+    )
+    .onConflictDoUpdate({
+      target: schema.exercises.code,
+      targetWhere: sql`code IS NOT NULL`,
+      set: {
+        name: sql`excluded.name`,
+        bodyRegion: sql`excluded.body_region`,
+        instructions: sql`excluded.instructions`,
+        defaultSets: sql`excluded.default_sets`,
+        defaultReps: sql`excluded.default_reps`,
+        defaultHoldSeconds: sql`excluded.default_hold_seconds`,
+        defaultFrequency: sql`excluded.default_frequency`,
+      },
+    });
+  counts.exercises = EXERCISE_LIBRARY.length;
 
   console.log(`[seed] done in ${Date.now() - started} ms`, counts);
   await pool.end();
