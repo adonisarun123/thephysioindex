@@ -139,3 +139,32 @@ textarea.input { min-height: 120px; }
 .table th { text-align: left; font-weight: 500; color: var(--on-surface-variant); padding: .75rem .75rem; border-bottom: 1px solid var(--outline-variant); }
 .table td { padding: .75rem .75rem; border-bottom: 1px solid var(--outline-variant); vertical-align: top; }
 .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Practitioner profile (PUB-07) — expressive hero, kept to brand tokens. */
+.profile-hero-band {
+  position: relative;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(0, 169, 150, .65), transparent 42%),
+    radial-gradient(circle at 55% 140%, rgba(213, 245, 235, .28), transparent 45%),
+    linear-gradient(115deg, var(--brand-navy) 0%, #0f4256 52%, var(--primary) 100%);
+}
+.profile-hero-band::after {
+  content: ""; position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, .22) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(90deg, transparent 30%, #000 100%);
+}
+.profile-avatar {
+  background: linear-gradient(140deg, var(--brand-teal) 0%, var(--primary) 55%, var(--brand-navy) 100%);
+  box-shadow: var(--shadow-3);
+}
+.profile-how {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(0, 169, 150, .45), transparent 50%),
+    linear-gradient(135deg, var(--brand-navy), #0f4256);
+}
+.profile-rail-head { background: linear-gradient(135deg, var(--brand-navy) 0%, var(--primary) 100%); }
+.profile-cta { box-shadow: 0 6px 16px rgba(0, 107, 95, .28); }
+.profile-lift { transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease; }
+.profile-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); border-color: var(--outline); }
+@media (prefers-reduced-motion: reduce) { .profile-lift:hover { transform: none; } }
