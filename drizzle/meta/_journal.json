@@ -57,6 +57,20 @@
       "when": 1794058065815,
       "tag": "0007_branch_kind_service_area",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794291554546,
+      "tag": "0008_exercise_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794291555295,
+      "tag": "0009_exercise_plans_guards",
+      "breakpoints": true
     }
   ]
 }

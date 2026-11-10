@@ -11,6 +11,7 @@ export function WorkspaceShell({ practitionerName, status, current, children }: 
     { href: "/workspace/clinics", label: "Clinics and services" },
     { href: "/workspace/calendar", label: "Calendar" },
     { href: "/workspace/appointments", label: "Appointments" },
+    { href: "/workspace/exercises", label: "Exercise plans", badge: "New" },
     { href: "/workspace/offers", label: "Offers" },
     { href: "/workspace/reviews", label: "Reviews" },
     { href: "/workspace/team", label: "Team" },

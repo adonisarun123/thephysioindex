@@ -191,6 +191,8 @@ export async function mergePractitioners(tx: Db, v: Viewer, keepId: string, merg
   await count("bookings", sql`UPDATE bookings SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
   await count("reviews", sql`UPDATE reviews SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
   await count("enquiries", sql`UPDATE enquiries SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
+  await count("exercise_plans", sql`UPDATE exercise_plans SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
+  await count("exercises", sql`UPDATE exercises SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
   await tx.execute(sql`INSERT INTO practitioner_slug_history (practitioner_id, slug) VALUES (${keepId}, ${b.slug})`);
   await tx.execute(sql`INSERT INTO practitioner_slug_history (practitioner_id, slug) SELECT ${keepId}, slug FROM practitioner_slug_history WHERE practitioner_id = ${mergeId}`);
   await tx.execute(sql`UPDATE practitioners SET listing_status = 'archived', booking_eligible = false WHERE id = ${mergeId}`);
