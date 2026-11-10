@@ -6,6 +6,7 @@ import { classify, dedupeKey, localDateTime, nextStateAfterFailure, placeholders
 import { email } from "./email";
 import { sms } from "./sms";
 import { whatsapp, whatsappLanguage } from "./whatsapp";
+import { firstName } from "@/lib/practice/enquiries";
 
 /**
  * Notification delivery (Section 13, MSG-01, MSG-02).
@@ -22,7 +23,7 @@ import { whatsapp, whatsappLanguage } from "./whatsapp";
 
 const CONSUMER = "notifications";
 const LEASE_MINUTES = 5;
-export const NOTIFIED_EVENTS = ["booking.confirmed", "booking.rescheduled", "booking.cancelled", "booking.cancellation_requested", "booking.completed", "verification.decided"];
+export const NOTIFIED_EVENTS = ["booking.confirmed", "booking.rescheduled", "booking.cancelled", "booking.cancellation_requested", "booking.completed", "verification.decided", "enquiry.created"];
 
 type Channel = "sms" | "email" | "whatsapp";
 type Recipient = { type: "user" | "patient"; id: string };
@@ -84,6 +85,13 @@ export async function fanOutBatch(limit = 50): Promise<number> {
 }
 
 async function planEvent(tx: Db, ev: OutboxRow, offsets: number[], inviteDelayMinutes: number) {
+  if (ev.event_type === "enquiry.created") {
+    // ENQ-04: the practitioner's account, if the profile has an owner.
+    const owner = (await tx.execute<{ owner_user_id: string | null }>(sql`
+      SELECT p.owner_user_id FROM enquiries e JOIN practitioners p ON p.id = e.practitioner_id WHERE e.id = ${ev.aggregate_id}`)).rows[0]?.owner_user_id;
+    if (owner) await queueFor(tx, ev, { type: "user", id: owner }, "enquiry.created.practitioner", { bookingId: null });
+    return;
+  }
   if (ev.event_type === "verification.decided") {
     const userId = typeof ev.payload.recipientUserId === "string" ? ev.payload.recipientUserId : null;
     if (userId) await queueFor(tx, ev, { type: "user", id: userId }, "verification.decided", { bookingId: null });
@@ -263,7 +271,10 @@ async function deliver(d: Leased): Promise<void> {
       return;
     }
 
-    const vars = d.template_event === "verification.decided" ? await verificationVars(d.event_id) : await bookingVars(d);
+    const vars =
+      d.template_event === "verification.decided" ? await verificationVars(d.event_id)
+      : d.template_event === "enquiry.created.practitioner" ? await enquiryVars(d.event_id)
+      : await bookingVars(d);
     if (vars === "stale") {
       await finish(d.id, "cancelled", "stale: booking changed, cancelled or already started");
       return;
@@ -374,6 +385,15 @@ const NEXT_ACTION: Record<string, string> = {
   rejected: "If you think this is wrong, reply through support in your workspace.",
   changes_requested: "Sign in, update your submission and resubmit it.",
 };
+
+/** ENQ-04: first name only; the mobile number and message stay in the workspace. A handled enquiry is not announced. */
+async function enquiryVars(eventId: string): Promise<Vars | "stale"> {
+  const e = (await db().execute<{ requester_name: string; status: string }>(sql`
+    SELECT e.requester_name, e.status FROM outbox_events o JOIN enquiries e ON e.id = o.aggregate_id WHERE o.event_id = ${eventId}`)).rows[0];
+  if (!e) throw new SendError("enquiry not found", true);
+  if (e.status === "closed") return "stale";
+  return { requesterFirstName: firstName(e.requester_name), workspaceUrl: `${appUrl()}/workspace/enquiries` };
+}
 
 async function verificationVars(eventId: string): Promise<Vars> {
   const ev = (await db().execute<{ payload: Record<string, unknown> }>(sql`SELECT payload FROM outbox_events WHERE event_id = ${eventId}`)).rows[0];

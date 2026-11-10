@@ -258,6 +258,17 @@ type NotificationTemplateSeed = {
 
 const BASE_NOTIFICATION_TEMPLATES: NotificationTemplateSeed[] = [
   {
+    eventType: "enquiry.created.practitioner",
+    channel: "sms",
+    body: "New enquiry from {{requesterFirstName}}. Call or WhatsApp them from your inbox: {{workspaceUrl}} - The Physio Index",
+  },
+  {
+    eventType: "enquiry.created.practitioner",
+    channel: "email",
+    subject: "New enquiry from {{requesterFirstName}}",
+    body: "{{requesterFirstName}} sent an enquiry through your Physio Index profile.\n\nTheir contact details and message are in your inbox: {{workspaceUrl}}\n\nReply soon while they are still looking.",
+  },
+  {
     eventType: "booking.confirmed",
     channel: "sms",
     body: "Your physiotherapy appointment {{reference}} is confirmed for {{localDateTime}} at {{clinicName}}, {{locality}}. Manage: {{manageUrl}} - The Physio Index",

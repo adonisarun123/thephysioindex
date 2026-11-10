@@ -4,13 +4,14 @@ import { Logo } from "@/components/logo";
 export type WsNavItem = { href: string; label: string; badge?: string };
 
 /** Practitioner workspace shell (Section 15). Pages enforce ownership via canManagePractitioner. */
-export function WorkspaceShell({ practitionerName, status, current, children }: { practitionerName: string | null; status: string | null; current: string; children: React.ReactNode }) {
+export function WorkspaceShell({ practitionerName, status, current, enquiryBadge, children }: { practitionerName: string | null; status: string | null; current: string; enquiryBadge?: string; children: React.ReactNode }) {
   const items: WsNavItem[] = [
     { href: "/workspace", label: "Overview" },
     { href: "/workspace/profile", label: "Profile" },
     { href: "/workspace/clinics", label: "Clinics and services" },
     { href: "/workspace/calendar", label: "Calendar" },
     { href: "/workspace/appointments", label: "Appointments" },
+    { href: "/workspace/enquiries", label: "Enquiries", badge: enquiryBadge },
     { href: "/workspace/exercises", label: "Exercise plans", badge: "New" },
     { href: "/workspace/offers", label: "Offers" },
     { href: "/workspace/reviews", label: "Reviews" },
