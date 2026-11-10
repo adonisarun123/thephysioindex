@@ -10,8 +10,22 @@ Scope added on top of SRS v1.0 after reviewing practice-management products (phy
 - **HEP-04 Private link.** `/plan/<token>`; token = plan id + HMAC(server secret, plan id, link version). No token is stored. "Make a new link" bumps the version and revokes the old link; archiving makes the link inactive. Invalid, stale and archived links show the same message. The page is `noindex`, `no-referrer`, disallowed in robots, and never loads the Google Ads tag.
 - **HEP-05 Sharing.** "Send on WhatsApp" opens WhatsApp click-to-chat (`wa.me/?text=`) with the link pre-filled; no provider and no stored phone number.
 
-## Planned in this addendum (separate PRs)
+## WAP — WhatsApp notifications
 
-- **WAP** — WhatsApp as a notification channel (provider adapter; console until a provider and approved templates exist; behind the `messaging.whatsapp` flag).
-- **ENQ** — practitioner enquiry inbox with follow-up dates.
-- **PKG** — session packages (prepaid bundles) on top of offerings.
+- **WAP-01** Provider adapter (`src/lib/messaging/whatsapp.ts`): console by default; Meta WhatsApp Cloud API when configured. Approved template name in `provider_template_id`; values positional in placeholder order.
+- **WAP-02** A user gets WhatsApp only with the `messaging.whatsapp` flag on, a verified mobile and an explicit opt-in; it then replaces SMS for that user. Dependants stay on SMS.
+- **WAP-03** A WhatsApp twin of every SMS template. Setup: `docs/runbooks/whatsapp.md`.
+
+## ENQ — Enquiry inbox
+
+- **ENQ-01** `/workspace/enquiries` lists the practitioner's own enquiries (open, follow-ups due, closed, all).
+- **ENQ-02** Contacted, follow-up date, private note, close with outcome (booked / not interested / no response / other), reopen.
+- **ENQ-03** Nav badge = unanswered + follow-ups due.
+- **ENQ-04** New enquiry → `enquiry.created` → the profile owner is notified with the requester's first name only; mobile and message stay in the workspace. Unclaimed profiles still go to admin.
+
+## PKG — Session packages
+
+- **PKG-01** Package catalogue per practitioner (name, sessions, price in paise, validity days). Not public; online booking prices unchanged.
+- **PKG-02** Sale copies sessions, price and validity (snapshots); patient by first name/initials; payments recorded up to the price, never above.
+- **PKG-03** One ledger row per session used; the package row is locked, so concurrent clicks cannot over-use it; undo removes the latest row.
+- **PKG-04** Expired packages block use until extended; close/reopen; list shows sessions left, balance due and expiry.

@@ -92,6 +92,20 @@
       "when": 1794292699940,
       "tag": "0012_backfill_verified_contacts",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794292848477,
+      "tag": "0013_session_packages",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794292849549,
+      "tag": "0014_session_packages_guards",
+      "breakpoints": true
     }
   ]
 }
