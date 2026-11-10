@@ -5,6 +5,7 @@ import { formatPaise } from "@/lib/money";
 import { classify, dedupeKey, localDateTime, nextStateAfterFailure, placeholders, reminderKey, reminderTimes, render, SendError } from "./core";
 import { email } from "./email";
 import { sms } from "./sms";
+import { whatsapp, whatsappLanguage } from "./whatsapp";
 
 /**
  * Notification delivery (Section 13, MSG-01, MSG-02).
@@ -23,7 +24,7 @@ const CONSUMER = "notifications";
 const LEASE_MINUTES = 5;
 export const NOTIFIED_EVENTS = ["booking.confirmed", "booking.rescheduled", "booking.cancelled", "booking.cancellation_requested", "booking.completed", "verification.decided"];
 
-type Channel = "sms" | "email";
+type Channel = "sms" | "email" | "whatsapp";
 type Recipient = { type: "user" | "patient"; id: string };
 
 type OutboxRow = {
@@ -176,18 +177,31 @@ async function loadContact(tx: Db, r: Recipient): Promise<Contact | null> {
     return { mobile: p.mobile, email: null, channels: ["sms"], language: "en" };
   }
   const u = (
-    await tx.execute<{ mobile: string | null; email: string | null; sms_ok: boolean | null; email_ok: boolean | null; language: string | null }>(sql`
+    await tx.execute<{ mobile: string | null; email: string | null; sms_ok: boolean | null; email_ok: boolean | null; wa_ok: boolean | null; wa_enabled: boolean | null; language: string | null }>(sql`
       SELECT CASE WHEN u.mobile_verified_at IS NOT NULL THEN u.mobile END AS mobile,
              CASE WHEN u.email_verified_at IS NOT NULL THEN u.email END AS email,
-             np.transactional_sms AS sms_ok, np.transactional_email AS email_ok, np.preferred_language AS language
+             np.transactional_sms AS sms_ok, np.transactional_email AS email_ok, np.whatsapp_opt_in AS wa_ok, np.preferred_language AS language,
+             (SELECT enabled FROM feature_flags WHERE key = 'messaging.whatsapp') AS wa_enabled
       FROM users u LEFT JOIN notification_preferences np ON np.user_id = u.id
       WHERE u.id = ${r.id} AND u.status = 'active'`)
   ).rows[0];
   if (!u) return null;
+  return { mobile: u.mobile, email: u.email, channels: contactChannels(u), language: u.language ?? "en" };
+}
+
+/**
+ * Channel choice per user (MSG-01, WAP-02). WhatsApp needs the platform flag,
+ * a verified mobile and the user's explicit opt-in; when it applies it
+ * replaces SMS for that user, so nobody gets the same message twice on one
+ * phone. Patients without an account (dependants) keep SMS only.
+ */
+export function contactChannels(u: { mobile: string | null; email: string | null; sms_ok: boolean | null; email_ok: boolean | null; wa_ok: boolean | null; wa_enabled: boolean | null }): Channel[] {
   const channels: Channel[] = [];
-  if (u.mobile && u.sms_ok !== false) channels.push("sms");
+  const wa = Boolean(u.mobile && u.wa_enabled && u.wa_ok);
+  if (wa) channels.push("whatsapp");
+  else if (u.mobile && u.sms_ok !== false) channels.push("sms");
   if (u.email && u.email_ok !== false) channels.push("email");
-  return { mobile: u.mobile, email: u.email, channels, language: u.language ?? "en" };
+  return channels;
 }
 
 async function pickTemplate(tx: Db, eventType: string, channel: Channel, language: string): Promise<{ id: string; version: number } | null> {
@@ -243,7 +257,7 @@ async function deliver(d: Leased): Promise<void> {
   const conn = db();
   try {
     const contact = await loadContact(conn, { type: d.recipient_type, id: d.recipient_id });
-    const address = d.channel === "sms" ? contact?.mobile : contact?.email;
+    const address = d.channel === "email" ? contact?.email : contact?.mobile;
     if (!contact || !address || !contact.channels.includes(d.channel)) {
       await finish(d.id, "cancelled", "recipient has no verified contact for this channel or opted out");
       return;
@@ -256,7 +270,11 @@ async function deliver(d: Leased): Promise<void> {
     }
 
     const text = render(d.body, vars);
-    if (d.channel === "sms") {
+    if (d.channel === "whatsapp") {
+      const params = placeholders(d.body).map((k) => String(vars[k]));
+      const r = await whatsapp().sendTemplate(address, { text, templateName: d.provider_template_id, language: whatsappLanguage(contact.language), params });
+      await finish(d.id, "sent", null, r.providerRef);
+    } else if (d.channel === "sms") {
       const smsVars = Object.fromEntries(placeholders(d.body).map((k) => [k, String(vars[k])]));
       const r = await sms().sendNotification(address, { text, providerTemplateId: d.provider_template_id, vars: smsVars });
       await finish(d.id, "sent", null, r.providerRef);

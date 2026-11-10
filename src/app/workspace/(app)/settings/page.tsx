@@ -59,7 +59,7 @@ async function Settings({ searchParams }: { searchParams: PageProps<"/workspace/
           <div className="grid gap-2 text-sm">
             <label className="flex items-center gap-2"><input type="checkbox" name="transactionalSms" defaultChecked={prefs.transactionalSms} /> SMS for bookings, cancellations and reminders</label>
             <label className="flex items-center gap-2"><input type="checkbox" name="transactionalEmail" defaultChecked={prefs.transactionalEmail} /> Email for bookings, review outcomes and credential reminders</label>
-            <label className="flex items-center gap-2"><input type="checkbox" name="whatsappOptIn" defaultChecked={prefs.whatsappOptIn} /> WhatsApp (when the channel is enabled)</label>
+            <label className="flex items-center gap-2"><input type="checkbox" name="whatsappOptIn" defaultChecked={prefs.whatsappOptIn} /> WhatsApp instead of SMS for the same updates (when the channel is enabled; needs a verified mobile)</label>
             <label className="flex items-center gap-2"><input type="checkbox" name="marketingOptIn" defaultChecked={prefs.marketingOptIn} /> Product updates and tips</label>
             <div className="max-w-xs">
               <Field label="Preferred language" htmlFor="preferredLanguage">
