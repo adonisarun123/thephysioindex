@@ -29,3 +29,10 @@ Scope added on top of SRS v1.0 after reviewing practice-management products (phy
 - **PKG-02** Sale copies sessions, price and validity (snapshots); patient by first name/initials; payments recorded up to the price, never above.
 - **PKG-03** One ledger row per session used; the package row is locked, so concurrent clicks cannot over-use it; undo removes the latest row.
 - **PKG-04** Expired packages block use until extended; close/reopen; list shows sessions left, balance due and expiry.
+
+## RCP — Prints, receipts and reminders (from physiosoftware.in, 10 Nov 2026)
+
+- **RCP-01** Payment ledger: every package payment is a row with a receipt number unique per practitioner (`R-00001`…), allocated from `practice_counters` under the row lock. Migration 0016 creates one opening receipt for packages already paid.
+- **RCP-02** Printable payment receipt (letterhead, receipt no., amount in words, mode, paid to date, balance). Not a tax invoice.
+- **RCP-03** Printable home-exercise prescription on the letterhead (name, degrees, first registration number with authority, first clinic's name/address/phone; no address for home-visit-only physios). Patients can print their plan page too.
+- **RCP-04** Balance-due reminder via WhatsApp click-to-chat from the package card.

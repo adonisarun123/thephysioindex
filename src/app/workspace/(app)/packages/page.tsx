@@ -5,7 +5,8 @@ import { Suspense } from "react";
 import { Empty, Field, Notice, PageHeader, Section } from "@/components/workspace/forms/ui";
 import { formatPaise } from "@/lib/money";
 import { istToday } from "@/lib/practice/exercise-plans";
-import { listSold, listTemplates, PAYMENT_MODES, perSessionPaise, type PackageFilter } from "@/lib/practice/packages";
+import { listPayments, listSold, listTemplates, PAYMENT_MODES, perSessionPaise, type PackageFilter } from "@/lib/practice/packages";
+import { whatsappShareUrl } from "@/lib/practice/exercise-plans";
 import { requireWorkspace } from "@/lib/workspace/context";
 import { readMessage } from "@/lib/workspace/forms";
 import { createTemplateAction, packageAction, retireTemplateAction, sellAction } from "./actions";
@@ -30,6 +31,7 @@ async function Packages({ searchParams }: { searchParams: PageProps<"/workspace/
   const show: PackageFilter = sp.show === "closed" ? "closed" : "active";
   const { practitioner: p } = await requireWorkspace("/workspace/packages");
   const [templates, sold] = await Promise.all([listTemplates(p.id), listSold(p.id, show)]);
+  const payments = await listPayments(p.id, sold.map((x) => x.id));
   const msg = readMessage(sp);
   const today = istToday();
   const due = sold.reduce((s, x) => s + (x.pricePaise - x.paidPaise), 0);
@@ -64,6 +66,23 @@ async function Packages({ searchParams }: { searchParams: PageProps<"/workspace/
                         {balance > 0 ? <span className="font-semibold"> · {formatPaise(balance)} due</span> : " · fully paid"}
                       </p>
                       {x.note ? <p className="text-muted">Note: {x.note}</p> : null}
+                      {payments.get(x.id)?.length ? (
+                        <p className="text-muted">Receipts:{" "}
+                          {payments.get(x.id)!.map((pay, i) => (
+                            <span key={pay.id}>{i ? ", " : ""}<Link href={`/workspace/packages/receipts/${pay.id}`} className="underline">{pay.receiptNo}</Link> ({formatPaise(pay.amountPaise)})</span>
+                          ))}
+                        </p>
+                      ) : null}
+                      {x.state === "active" && balance > 0 ? (
+                        <a
+                          className="mt-1 inline-block text-sm underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          href={whatsappShareUrl(`Hi ${x.patientLabel}, a friendly reminder from ${p.displayName}: ${formatPaise(balance)} is due for your ${x.name} (${left} of ${x.sessionsTotal} sessions left, valid till ${fmtDay(x.expiresOn)}). You can pay at your next visit. Thank you.`)}
+                        >
+                          Send payment reminder on WhatsApp
+                        </a>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <progress max={x.sessionsTotal} value={x.used} className="h-2 w-28" aria-label={`${x.used} of ${x.sessionsTotal} sessions used`} />

@@ -30,9 +30,6 @@ describe.skipIf(!TEST_DB)("session packages on PostgreSQL", () => {
     actor = u.id;
     templateId = await pkg.createTemplate(a.practitionerId, actor, { name: "Knee rehab — 3 sessions", sessions: 3, pricePaise: 300_000, validityDays: 30 });
   });
-  afterAll(async () => {
-    await closeFixtures();
-  });
 
   it("sells with snapshots; later template changes do not alter the sale (PKG-02)", async () => {
     const id = await pkg.sellPackage(a.practitionerId, actor, { templateId, patientLabel: "Meena", paidPaise: 100_000, paymentMode: "upi", startsOn: today() });
@@ -85,4 +82,36 @@ describe.skipIf(!TEST_DB)("session packages on PostgreSQL", () => {
     expect(code(await pkg.sellPackage(a.practitionerId, actor, { templateId: t2, patientLabel: "K", paidPaise: 0, startsOn: today() }).catch((e) => e))).toBe("INVALID_INPUT");
     expect((await pkg.listSold(a.practitionerId, "active")).some((x) => x.id === sale)).toBe(true);
   });
+});
+
+describe("receipts (pure)", () => {
+  it("writes amounts in Indian-English words", async () => {
+    const { rupeesInWords } = await import("@/lib/practice/packages");
+    expect(rupeesInWords(600_000)).toBe("Six thousand rupees only");
+    expect(rupeesInWords(1_250_050)).toBe("Twelve thousand five hundred rupees only");
+    expect(rupeesInWords(12_345_678_900)).toBe("Twelve crore thirty-four lakh fifty-six thousand seven hundred and eighty-nine rupees only");
+    expect(rupeesInWords(0)).toBe("Zero rupees only");
+  });
+});
+
+describe.skipIf(!TEST_DB)("receipts on PostgreSQL (RCP-01, RCP-02)", () => {
+  it("numbers receipts per practitioner without gaps under concurrency and computes the running balance", async () => {
+    const fx = await makePractitioner();
+    const [u] = await q<{ id: string }>(`INSERT INTO users (auth_subject, display_name, is_test_account) VALUES ('test-rcp-' || gen_random_uuid(), 'TEST RCP', true) RETURNING id`);
+    const t = await pkg.createTemplate(fx.practitionerId, u.id, { name: "Back — 5 sessions", sessions: 5, pricePaise: 500_000, validityDays: 30 });
+    const id = await pkg.sellPackage(fx.practitionerId, u.id, { templateId: t, patientLabel: "R", paidPaise: 100_000, paymentMode: "cash", startsOn: today() });
+    await Promise.all([1, 2, 3].map(() => pkg.recordPayment(fx.practitionerId, u.id, id, 100_000, "upi")));
+    const pays = (await pkg.listPayments(fx.practitionerId, [id])).get(id)!;
+    expect(pays.map((x) => x.receiptNo).sort()).toEqual(["R-00001", "R-00002", "R-00003", "R-00004"]);
+    const last = pays[pays.length - 1];
+    const r = await pkg.getReceipt(fx.practitionerId, last.id);
+    expect(r?.paidToDatePaise).toBe(400_000);
+    expect(r?.balanceAfterPaise).toBe(100_000);
+    const other = await makePractitioner();
+    expect(await pkg.getReceipt(other.practitionerId, last.id)).toBeNull();
+  });
+});
+
+afterAll(async () => {
+  if (TEST_DB) await closeFixtures();
 });

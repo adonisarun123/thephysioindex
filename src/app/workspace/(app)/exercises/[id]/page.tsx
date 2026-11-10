@@ -65,6 +65,7 @@ async function Plan({ params, searchParams }: { params: PageProps<"/workspace/ex
           <div className="mt-3 flex flex-wrap gap-2">
             <a href={whatsappShareUrl(message)} target="_blank" rel="noopener noreferrer" className="btn btn-primary py-2 text-sm">Send on WhatsApp</a>
             <a href={link} target="_blank" rel="noopener noreferrer" className="btn btn-secondary py-2 text-sm">Preview as patient</a>
+            <Link href={`/workspace/exercises/${plan.id}/print`} className="btn btn-secondary py-2 text-sm">Print prescription</Link>
             <form action={rotateLinkAction}><input type="hidden" name="planId" value={plan.id} /><button type="submit" className="btn btn-quiet py-2 text-sm">Make a new link</button></form>
           </div>
         </Section>

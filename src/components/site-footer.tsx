@@ -8,7 +8,7 @@ export async function SiteFooter() {
   const h = await headers();
   if (APP_SHELL_PATH.test(h.get("x-pathname") ?? "")) return null;
   return (
-    <footer className="mt-24 border-t border-line bg-surface text-sm text-muted">
+    <footer className="mt-24 border-t border-line bg-surface text-sm text-muted print:hidden">
       <div className="mx-auto grid max-w-[1280px] gap-10 px-4 py-14 md:grid-cols-4 md:px-6">
         <div className="md:col-span-2">
           <Logo />
