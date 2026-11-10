@@ -4,6 +4,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Notice } from "@/components/workspace/forms/ui";
+import { PrintButton } from "@/components/workspace/print";
 import { isBot } from "@/lib/analytics";
 import { doseLine, getPlanByToken, istToday, markPlanOpened } from "@/lib/practice/exercise-plans";
 import { readMessage } from "@/lib/workspace/forms";
@@ -49,6 +50,7 @@ async function PatientPlan({ params, searchParams }: { params: PageProps<"/plan/
         From{" "}
         {plan.practitionerPublished && plan.practitionerSlug ? <Link href={`/physiotherapist/${plan.practitionerSlug}`} className="underline">{plan.practitionerName}</Link> : plan.practitionerName}
       </p>
+      <div className="mt-3 print:hidden"><PrintButton label="Print this plan" /></div>
       <Notice ok={msg.ok} error={msg.error} />
 
       <div className="card mt-5 border-mark bg-mark-soft p-4 text-sm">
@@ -72,7 +74,7 @@ async function PatientPlan({ params, searchParams }: { params: PageProps<"/plan/
       </ol>
 
       {!plan.ended ? (
-        <form action={checkinAction} className="card mt-6 grid gap-3 p-4">
+        <form action={checkinAction} className="card mt-6 grid gap-3 p-4 print:hidden">
           <input type="hidden" name="token" value={token} />
           <h2 className="text-lg font-semibold">{plan.doneToday ? "Today is marked as done" : "Finished today's exercises?"}</h2>
           <label className="text-sm">

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, withTransaction, type Db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
+import { uuidArray } from "@/lib/sql";
 
 /**
  * Session packages (addendum PKG-01..04). A practice-side ledger: packages are
@@ -38,6 +39,24 @@ export const SaleSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 export type SaleInput = z.infer<typeof SaleSchema>;
+
+/** RCP-01: next receipt number for a practitioner, atomically (the upsert takes the counter row lock). */
+export async function nextReceiptNo(tx: Db, practitionerId: string): Promise<string> {
+  const r = await tx.execute<{ n: number }>(sql`
+    INSERT INTO practice_counters (practitioner_id, kind, next_value) VALUES (${practitionerId}, 'receipt', 2)
+    ON CONFLICT (practitioner_id, kind) DO UPDATE SET next_value = practice_counters.next_value + 1
+    RETURNING next_value - 1 AS n`);
+  return `R-${String(r.rows[0].n).padStart(5, "0")}`;
+}
+
+async function addPayment(tx: Db, practitionerId: string, packageId: string, amountPaise: number, mode: string | null, receivedOn: string | null, actorUserId: string): Promise<string> {
+  const receiptNo = await nextReceiptNo(tx, practitionerId);
+  const r = await tx.execute<{ id: string }>(sql`
+    INSERT INTO package_payments (package_id, practitioner_id, receipt_no, amount_paise, payment_mode, received_on, created_by)
+    VALUES (${packageId}, ${practitionerId}, ${receiptNo}, ${amountPaise}, ${mode}, coalesce(${receivedOn}::date, (now() AT TIME ZONE 'Asia/Kolkata')::date), ${actorUserId})
+    RETURNING id`);
+  return r.rows[0].id;
+}
 
 export type PackageTemplate = { id: string; name: string; sessions: number; pricePaise: number; validityDays: number; sold: number };
 
@@ -76,6 +95,7 @@ export async function sellPackage(practitionerId: string, actorUserId: string, i
       VALUES (${practitionerId}, ${input.templateId}, ${t.name}, ${input.patientLabel}, ${t.sessions}, ${t.price_paise}, ${input.paidPaise}, ${input.paymentMode ?? null},
               ${input.startsOn}::date, ${input.startsOn}::date + ${t.validity_days}::int, ${input.note ?? null}, ${actorUserId})
       RETURNING id`);
+    if (input.paidPaise > 0) await addPayment(tx, practitionerId, res.rows[0].id, input.paidPaise, input.paymentMode ?? null, input.startsOn, actorUserId);
     await audit({ actorUserId, action: "patient_package.sell", objectType: "patient_package", objectId: res.rows[0].id, changedFields: { templateId: input.templateId, paidPaise: input.paidPaise } }, tx);
     return res.rows[0].id;
   });
@@ -156,13 +176,15 @@ export async function undoLastSession(practitionerId: string, actorUserId: strin
 }
 
 /** PKG-02: record a further payment towards the balance. */
-export async function recordPayment(practitionerId: string, actorUserId: string, packageId: string, amountPaise: number, mode?: PaymentMode): Promise<void> {
+export async function recordPayment(practitionerId: string, actorUserId: string, packageId: string, amountPaise: number, mode?: PaymentMode): Promise<string> {
   if (!Number.isInteger(amountPaise) || amountPaise <= 0) throw new ApiError("INVALID_INPUT", "Enter the amount received");
-  await withTransaction(async (_c, tx) => {
+  return withTransaction(async (_c, tx) => {
     const p = await lockPackage(tx, practitionerId, packageId);
     if (p.paid_paise + amountPaise > p.price_paise) throw new ApiError("INVALID_INPUT", "That is more than the balance due");
     await tx.execute(sql`UPDATE patient_packages SET paid_paise = paid_paise + ${amountPaise}::int, payment_mode = coalesce(${mode ?? null}, payment_mode) WHERE id = ${packageId}`);
-    await audit({ actorUserId, action: "patient_package.payment", objectType: "patient_package", objectId: packageId, changedFields: { amountPaise, mode: mode ?? null } }, tx);
+    const paymentId = await addPayment(tx, practitionerId, packageId, amountPaise, mode ?? null, null, actorUserId);
+    await audit({ actorUserId, action: "patient_package.payment", objectType: "patient_package", objectId: packageId, changedFields: { amountPaise, mode: mode ?? null, paymentId } }, tx);
+    return paymentId;
   });
 }
 
@@ -185,4 +207,73 @@ export async function setPackageClosed(practitionerId: string, actorUserId: stri
 /** Per-session price for display, rounded down to whole rupees. */
 export function perSessionPaise(pricePaise: number, sessions: number): number {
   return sessions > 0 ? Math.floor(pricePaise / sessions / 100) * 100 : 0;
+}
+
+// ------------------------------------------------------------------ receipts (RCP-01, RCP-02)
+
+export type PaymentRow = { id: string; receiptNo: string; amountPaise: number; paymentMode: string | null; receivedOn: string };
+
+export async function listPayments(practitionerId: string, packageIds: string[]): Promise<Map<string, PaymentRow[]>> {
+  const out = new Map<string, PaymentRow[]>();
+  if (packageIds.length === 0) return out;
+  const res = await db().execute<{ id: string; package_id: string; receipt_no: string; amount_paise: number; payment_mode: string | null; received_on: string }>(sql`
+    SELECT id, package_id, receipt_no, amount_paise, payment_mode, received_on::text AS received_on
+    FROM package_payments WHERE practitioner_id = ${practitionerId} AND package_id = ANY(${uuidArray(packageIds)})
+    ORDER BY created_at`);
+  for (const r of res.rows) {
+    const list = out.get(r.package_id) ?? [];
+    list.push({ id: r.id, receiptNo: r.receipt_no, amountPaise: r.amount_paise, paymentMode: r.payment_mode, receivedOn: r.received_on });
+    out.set(r.package_id, list);
+  }
+  return out;
+}
+
+export type Receipt = PaymentRow & {
+  packageName: string;
+  patientLabel: string;
+  sessionsTotal: number;
+  pricePaise: number;
+  paidToDatePaise: number;
+  balanceAfterPaise: number;
+};
+
+/** RCP-02: one receipt, scoped to the practitioner. Balance is computed up to and including this payment. */
+export async function getReceipt(practitionerId: string, paymentId: string): Promise<Receipt | null> {
+  if (!z.uuid().safeParse(paymentId).success) return null;
+  const res = await db().execute<{
+    id: string; receipt_no: string; amount_paise: number; payment_mode: string | null; received_on: string; name: string; patient_label: string;
+    sessions_total: number; price_paise: number; paid_to_date: number;
+  }>(sql`
+    SELECT p.id, p.receipt_no, p.amount_paise, p.payment_mode, p.received_on::text AS received_on, pp.name, pp.patient_label, pp.sessions_total, pp.price_paise,
+           (SELECT coalesce(sum(x.amount_paise), 0)::int FROM package_payments x WHERE x.package_id = p.package_id AND (x.created_at, x.id) <= (p.created_at, p.id)) AS paid_to_date
+    FROM package_payments p JOIN patient_packages pp ON pp.id = p.package_id
+    WHERE p.id = ${paymentId} AND p.practitioner_id = ${practitionerId}`);
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    id: r.id, receiptNo: r.receipt_no, amountPaise: r.amount_paise, paymentMode: r.payment_mode, receivedOn: r.received_on, packageName: r.name,
+    patientLabel: r.patient_label, sessionsTotal: r.sessions_total, pricePaise: r.price_paise, paidToDatePaise: r.paid_to_date,
+    balanceAfterPaise: r.price_paise - r.paid_to_date,
+  };
+}
+
+/** Indian-English amount in words for receipts, whole rupees (e.g. "Six thousand rupees only"). */
+export function rupeesInWords(paise: number): string {
+  const n = Math.floor(paise / 100);
+  if (n === 0) return "Zero rupees only";
+  const ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+  const tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+  const two = (x: number) => (x < 20 ? ones[x] : `${tens[Math.floor(x / 10)]}${x % 10 ? `-${ones[x % 10]}` : ""}`);
+  const three = (x: number) => [x >= 100 ? `${ones[Math.floor(x / 100)]} hundred` : "", x % 100 ? two(x % 100) : ""].filter(Boolean).join(" and ");
+  const parts: string[] = [];
+  const crore = Math.floor(n / 10_000_000);
+  const lakh = Math.floor((n % 10_000_000) / 100_000);
+  const thousand = Math.floor((n % 100_000) / 1000);
+  const rest = n % 1000;
+  if (crore) parts.push(`${three(crore)} crore`);
+  if (lakh) parts.push(`${two(lakh)} lakh`);
+  if (thousand) parts.push(`${two(thousand)} thousand`);
+  if (rest) parts.push(three(rest));
+  const words = parts.join(" ");
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} rupees only`;
 }
