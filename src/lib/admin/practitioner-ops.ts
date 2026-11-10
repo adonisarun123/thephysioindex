@@ -195,6 +195,10 @@ export async function mergePractitioners(tx: Db, v: Viewer, keepId: string, merg
   await count("exercises", sql`UPDATE exercises SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
   await count("package_templates", sql`UPDATE package_templates SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
   await count("patient_packages", sql`UPDATE patient_packages SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
+  // Receipt and patient numbers are unique per practitioner; merged ones keep their number with an "-M" suffix.
+  await count("package_payments", sql`UPDATE package_payments SET practitioner_id = ${keepId}, receipt_no = receipt_no || '-M' WHERE practitioner_id = ${mergeId}`);
+  await count("practice_patients", sql`UPDATE practice_patients SET practitioner_id = ${keepId}, ref_no = ref_no || '-M' WHERE practitioner_id = ${mergeId}`);
+  await count("patient_visits", sql`UPDATE patient_visits SET practitioner_id = ${keepId} WHERE practitioner_id = ${mergeId}`);
   await tx.execute(sql`INSERT INTO practitioner_slug_history (practitioner_id, slug) VALUES (${keepId}, ${b.slug})`);
   await tx.execute(sql`INSERT INTO practitioner_slug_history (practitioner_id, slug) SELECT ${keepId}, slug FROM practitioner_slug_history WHERE practitioner_id = ${mergeId}`);
   await tx.execute(sql`UPDATE practitioners SET listing_status = 'archived', booking_eligible = false WHERE id = ${mergeId}`);

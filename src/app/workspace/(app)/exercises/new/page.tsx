@@ -7,6 +7,7 @@ import { Notice, PageHeader, Section } from "@/components/workspace/forms/ui";
 import { PlanFields } from "@/components/workspace/plan-fields";
 import { BODY_REGIONS, listExercises, MAX_PLAN_ITEMS } from "@/lib/practice/exercise-plans";
 import { requireWorkspace } from "@/lib/workspace/context";
+import { linkablePatients } from "@/lib/practice/patient-links";
 import { readMessage } from "@/lib/workspace/forms";
 import { createPlanAction } from "../actions";
 
@@ -24,14 +25,15 @@ async function NewPlan({ searchParams }: { searchParams: PageProps<"/workspace/e
   await connection();
   const sp = await searchParams;
   const { practitioner: p } = await requireWorkspace("/workspace/exercises/new");
-  const exercises = await listExercises(p.id);
+  const [exercises, patients] = await Promise.all([listExercises(p.id), linkablePatients()]);
+  const patientId = typeof sp.patient === "string" ? sp.patient : undefined;
   const msg = readMessage(sp);
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader title="New exercise plan" lede="Pick exercises, adjust the dose, save, then send the link to your patient." action={<Link href="/workspace/exercises" className="btn btn-quiet py-2 text-sm">Back to plans</Link>} />
       <Notice ok={msg.ok} error={msg.error} />
       <form action={createPlanAction}>
-        <PlanFields />
+        <PlanFields patients={patients} patientId={patientId} />
         <Section title="Exercises">
           <PlanBuilder exercises={exercises} regions={[...BODY_REGIONS]} initial={[]} max={MAX_PLAN_ITEMS} />
         </Section>

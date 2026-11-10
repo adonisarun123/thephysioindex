@@ -5,6 +5,7 @@ import { db, withTransaction, type Db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { uuidArray } from "@/lib/sql";
+import { assertOwnPatient } from "./patients";
 
 /**
  * Home exercise plans (addendum HEP-01..05). A practitioner builds a plan from
@@ -84,6 +85,7 @@ export const PlanItemSchema = z.object({ exerciseId: z.uuid(), ...dose, note: z.
 
 export const PlanInputSchema = z.object({
   patientLabel: z.string().trim().min(1, "Enter the patient's first name or initials").max(40, "Use a first name or initials only"),
+  practicePatientId: z.uuid().optional(),
   title: z.string().trim().min(3, "Give the plan a title").max(80),
   advice: z.string().trim().max(1500).optional(),
   endsOn: z.iso.date().optional(),
@@ -189,6 +191,7 @@ export type PlanDetail = {
   id: string;
   practitionerId: string;
   patientLabel: string;
+  practicePatientId: string | null;
   title: string;
   advice: string | null;
   state: "active" | "archived";
@@ -202,9 +205,9 @@ export type PlanDetail = {
 
 async function loadPlan(where: SQL): Promise<PlanDetail | null> {
   const p = await db().execute<{
-    id: string; practitioner_id: string; patient_label: string; title: string; advice: string | null; state: "active" | "archived";
+    id: string; practitioner_id: string; patient_label: string; practice_patient_id: string | null; title: string; advice: string | null; state: "active" | "archived";
     ends_on: string | null; link_version: number; created_at: string; last_opened_at: string | null;
-  }>(sql`SELECT id, practitioner_id, patient_label, title, advice, state, ends_on::text AS ends_on, link_version, created_at, last_opened_at
+  }>(sql`SELECT id, practitioner_id, patient_label, practice_patient_id, title, advice, state, ends_on::text AS ends_on, link_version, created_at, last_opened_at
          FROM exercise_plans WHERE ${where}`);
   const row = p.rows[0];
   if (!row) return null;
@@ -220,7 +223,7 @@ async function loadPlan(where: SQL): Promise<PlanDetail | null> {
       SELECT day::text AS day, pain_score FROM exercise_plan_checkins WHERE plan_id = ${row.id} ORDER BY day DESC LIMIT 60`),
   ]);
   return {
-    id: row.id, practitionerId: row.practitioner_id, patientLabel: row.patient_label, title: row.title, advice: row.advice, state: row.state,
+    id: row.id, practitionerId: row.practitioner_id, patientLabel: row.patient_label, practicePatientId: row.practice_patient_id, title: row.title, advice: row.advice, state: row.state,
     endsOn: row.ends_on, linkVersion: row.link_version, createdAt: new Date(row.created_at), lastOpenedAt: row.last_opened_at ? new Date(row.last_opened_at) : null,
     items: items.rows.map((i) => ({
       exerciseId: i.exercise_id, name: i.name, bodyRegion: i.body_region, instructions: i.instructions, sets: i.sets, reps: i.reps,
@@ -258,9 +261,10 @@ async function writeItems(tx: Db, planId: string, items: PlanInput["items"]) {
 export async function createPlan(practitionerId: string, actorUserId: string, input: PlanInput): Promise<{ planId: string; token: string }> {
   const createdId = await withTransaction(async (_c, tx) => {
     await assertUsableExercises(tx, practitionerId, input.items.map((i) => i.exerciseId), []);
+    await assertOwnPatient(tx, practitionerId, input.practicePatientId);
     const res = await tx.execute<{ id: string }>(sql`
-      INSERT INTO exercise_plans (practitioner_id, patient_label, title, advice, ends_on, created_by)
-      VALUES (${practitionerId}, ${input.patientLabel}, ${input.title}, ${input.advice ?? null}, ${input.endsOn ?? null}::date, ${actorUserId})
+      INSERT INTO exercise_plans (practitioner_id, patient_label, practice_patient_id, title, advice, ends_on, created_by)
+      VALUES (${practitionerId}, ${input.patientLabel}, ${input.practicePatientId ?? null}, ${input.title}, ${input.advice ?? null}, ${input.endsOn ?? null}::date, ${actorUserId})
       RETURNING id`);
     const id = res.rows[0].id;
     await writeItems(tx, id, input.items);
@@ -277,8 +281,9 @@ export async function updatePlan(practitionerId: string, actorUserId: string, pl
     if (!cur.rows[0]) throw new ApiError("NOT_FOUND", "Plan not found");
     const existing = await tx.execute<{ exercise_id: string }>(sql`SELECT exercise_id FROM exercise_plan_items WHERE plan_id = ${planId}`);
     await assertUsableExercises(tx, practitionerId, input.items.map((i) => i.exerciseId), existing.rows.map((r) => r.exercise_id));
+    await assertOwnPatient(tx, practitionerId, input.practicePatientId);
     await tx.execute(sql`
-      UPDATE exercise_plans SET patient_label = ${input.patientLabel}, title = ${input.title}, advice = ${input.advice ?? null}, ends_on = ${input.endsOn ?? null}::date
+      UPDATE exercise_plans SET patient_label = ${input.patientLabel}, practice_patient_id = ${input.practicePatientId ?? null}, title = ${input.title}, advice = ${input.advice ?? null}, ends_on = ${input.endsOn ?? null}::date
       WHERE id = ${planId}`);
     await writeItems(tx, planId, input.items);
     await audit({ actorUserId, action: "exercise_plan.update", objectType: "exercise_plan", objectId: planId, changedFields: { items: input.items.length } }, tx);

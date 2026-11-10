@@ -4,6 +4,7 @@ import { db, withTransaction, type Db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { uuidArray } from "@/lib/sql";
+import { assertOwnPatient } from "./patients";
 
 /**
  * Session packages (addendum PKG-01..04). A practice-side ledger: packages are
@@ -33,6 +34,7 @@ export type TemplateInput = z.infer<typeof TemplateSchema>;
 export const SaleSchema = z.object({
   templateId: z.uuid(),
   patientLabel: z.string().trim().min(1, "Enter the patient's first name or initials").max(40, "Use a first name or initials only"),
+  practicePatientId: z.uuid().optional(),
   paidPaise: z.number().int().min(0),
   paymentMode: z.enum(MODE_KEYS).optional(),
   startsOn: z.iso.date(),
@@ -90,9 +92,10 @@ export async function sellPackage(practitionerId: string, actorUserId: string, i
       SELECT name, sessions, price_paise, validity_days FROM package_templates WHERE id = ${input.templateId} AND practitioner_id = ${practitionerId} AND is_active`)).rows[0];
     if (!t) throw new ApiError("INVALID_INPUT", "Choose one of your packages");
     if (input.paidPaise > t.price_paise) throw new ApiError("INVALID_INPUT", "Amount paid cannot be more than the package price");
+    await assertOwnPatient(tx, practitionerId, input.practicePatientId);
     const res = await tx.execute<{ id: string }>(sql`
-      INSERT INTO patient_packages (practitioner_id, template_id, name, patient_label, sessions_total, price_paise, paid_paise, payment_mode, starts_on, expires_on, note, created_by)
-      VALUES (${practitionerId}, ${input.templateId}, ${t.name}, ${input.patientLabel}, ${t.sessions}, ${t.price_paise}, ${input.paidPaise}, ${input.paymentMode ?? null},
+      INSERT INTO patient_packages (practitioner_id, template_id, name, patient_label, practice_patient_id, sessions_total, price_paise, paid_paise, payment_mode, starts_on, expires_on, note, created_by)
+      VALUES (${practitionerId}, ${input.templateId}, ${t.name}, ${input.patientLabel}, ${input.practicePatientId ?? null}, ${t.sessions}, ${t.price_paise}, ${input.paidPaise}, ${input.paymentMode ?? null},
               ${input.startsOn}::date, ${input.startsOn}::date + ${t.validity_days}::int, ${input.note ?? null}, ${actorUserId})
       RETURNING id`);
     if (input.paidPaise > 0) await addPayment(tx, practitionerId, res.rows[0].id, input.paidPaise, input.paymentMode ?? null, input.startsOn, actorUserId);
