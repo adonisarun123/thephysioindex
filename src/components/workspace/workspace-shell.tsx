@@ -21,8 +21,8 @@ export function WorkspaceShell({ practitionerName, status, current, enquiryBadge
     { href: "/workspace/settings", label: "Settings" },
   ];
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[15rem_1fr]">
-      <aside className="border-b border-line bg-surface lg:border-b-0 lg:border-r">
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[15rem_1fr] print:block print:bg-white">
+      <aside className="border-b border-line bg-surface print:hidden lg:border-b-0 lg:border-r">
         <div className="px-4 py-4">
           <Link href="/" aria-label="The Physio Index home"><Logo /></Link>
           <p className="mt-3 truncate text-sm font-semibold">{practitionerName ?? "Your profile"}</p>
@@ -45,11 +45,11 @@ export function WorkspaceShell({ practitionerName, status, current, enquiryBadge
         </nav>
       </aside>
       <div className="min-w-0">
-        <header className="flex items-center justify-end gap-3 border-b border-line bg-surface px-4 py-2 text-sm">
+        <header className="flex items-center justify-end gap-3 border-b border-line bg-surface px-4 py-2 text-sm print:hidden">
           <Link href="/account" className="underline">My account</Link>
           <form action="/sign-out" method="post"><button className="underline" type="submit">Sign out</button></form>
         </header>
-        <main className="px-4 py-6 lg:px-8">{children}</main>
+        <main className="px-4 py-6 lg:px-8 print:p-0">{children}</main>
       </div>
     </div>
   );

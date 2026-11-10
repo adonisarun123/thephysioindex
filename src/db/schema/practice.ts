@@ -153,3 +153,34 @@ export const packageSessionUses = pgTable(
   },
   (t) => [index("package_session_uses_package_idx").on(t.packageId, t.usedOn)],
 );
+
+/** RCP-01: every payment against a package, with a receipt number unique per practitioner. */
+export const packagePayments = pgTable(
+  "package_payments",
+  {
+    id: id(),
+    packageId: uuid("package_id").notNull().references(() => patientPackages.id, { onDelete: "cascade" }),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    receiptNo: text("receipt_no").notNull(),
+    amountPaise: integer("amount_paise").notNull(),
+    paymentMode: text("payment_mode"),
+    receivedOn: date("received_on").notNull(),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("package_payments_receipt_uq").on(t.practitionerId, t.receiptNo),
+    index("package_payments_package_idx").on(t.packageId, t.createdAt),
+  ],
+);
+
+/** RCP-01: per-practitioner document counters (receipt numbers). Incremented under the row lock. */
+export const practiceCounters = pgTable(
+  "practice_counters",
+  {
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    kind: text("kind").notNull(), // receipt
+    nextValue: integer("next_value").notNull().default(1),
+  },
+  (t) => [uniqueIndex("practice_counters_uq").on(t.practitionerId, t.kind)],
+);
