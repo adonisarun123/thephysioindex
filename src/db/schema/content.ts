@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { id, occurredAt, timestamps } from "./_common";
 import { users } from "./identity";
 import { practitioners } from "./practitioners";
@@ -111,9 +111,18 @@ export const enquiries = pgTable(
     status: text("status").notNull().default("new"), // new | forwarded | contacted | closed
     forwardedAt: timestamp("forwarded_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    // ENQ-02: practitioner follow-up in the workspace inbox. Notes are private to the practice.
+    contactedAt: timestamp("contacted_at", { withTimezone: true }),
+    followUpOn: date("follow_up_on"),
+    practitionerNote: text("practitioner_note"),
+    outcome: text("outcome"), // booked | not_interested | no_response | other
     ...timestamps,
   },
-  (t) => [index("enquiries_status_idx").on(t.status, t.createdAt), index("enquiries_practitioner_idx").on(t.practitionerId)],
+  (t) => [
+    index("enquiries_status_idx").on(t.status, t.createdAt),
+    index("enquiries_practitioner_idx").on(t.practitionerId),
+    index("enquiries_follow_up_idx").on(t.practitionerId, t.followUpOn),
+  ],
 );
 
 /**

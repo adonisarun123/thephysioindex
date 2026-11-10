@@ -8,6 +8,7 @@ import { audit } from "@/lib/audit";
 import { getViewer } from "@/lib/auth/session";
 import { resolvePractitionerSlug } from "@/lib/directory";
 import { normaliseIndianMobile } from "@/lib/messaging/sms";
+import { kickDispatch } from "@/lib/messaging/kick";
 import { done, failTo, opt, plainText, str } from "@/lib/workspace/forms";
 
 const Enquiry = z.object({
@@ -40,6 +41,9 @@ export async function submitEnquiry(formData: FormData) {
       INSERT INTO enquiries (practitioner_id, requester_user_id, requester_name, requester_mobile, message, status)
       VALUES (${p.id}, ${viewer?.userId ?? null}, ${input.name}, ${mobile}, ${input.message ? plainText(input.message, 1000) : null}, 'new') RETURNING id`);
     await audit({ actorUserId: viewer?.userId ?? null, action: "enquiry.create", objectType: "enquiry", objectId: ins.rows[0].id, changedFields: { practitionerId: p.id } });
+    // ENQ-04: tell the practitioner (email / SMS / WhatsApp per their preferences) through the outbox.
+    await db().execute(sql`INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload) VALUES ('enquiry', ${ins.rows[0].id}, 'enquiry.created', ${JSON.stringify({ practitionerId: p.id })}::jsonb)`);
+    kickDispatch();
     done(back, { ok: "sent" });
   } catch (err) {
     failTo(back, err);
