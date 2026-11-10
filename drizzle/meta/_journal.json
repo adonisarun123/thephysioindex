@@ -120,6 +120,20 @@
       "when": 1794293954448,
       "tag": "0016_package_payments_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794294272517,
+      "tag": "0017_patient_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794294273565,
+      "tag": "0018_patient_records_guards",
+      "breakpoints": true
     }
   ]
 }

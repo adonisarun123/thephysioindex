@@ -10,7 +10,7 @@ function whole(v: string | undefined, label: string): number | undefined {
 }
 
 /** Builder form → validated PlanInput (HEP-02). */
-export function parsePlanForm(fd: FormData): PlanInput {
+export function parsePlanForm(fd: FormData, linkedFirstName?: string | null): PlanInput {
   const items = rows(fd, "items").map((r) => ({
     exerciseId: r.exerciseId ?? "",
     sets: whole(r.sets, "Sets"),
@@ -20,7 +20,8 @@ export function parsePlanForm(fd: FormData): PlanInput {
     note: r.note || undefined,
   }));
   return PlanInputSchema.parse({
-    patientLabel: str(fd, "patientLabel"),
+    patientLabel: str(fd, "patientLabel") || linkedFirstName || "",
+    practicePatientId: opt(fd, "practicePatientId"),
     title: str(fd, "title"),
     advice: opt(fd, "advice"),
     endsOn: opt(fd, "endsOn"),

@@ -11,6 +11,7 @@ import { BODY_REGIONS, doseLine, getPlan, istToday, listExercises, MAX_PLAN_ITEM
 import { requestBaseUrl } from "@/lib/request-url";
 import { formatIst } from "@/lib/workspace/calendar";
 import { requireWorkspace } from "@/lib/workspace/context";
+import { linkablePatients } from "@/lib/practice/patient-links";
 import { readMessage } from "@/lib/workspace/forms";
 import { archivePlanAction, rotateLinkAction, updatePlanAction } from "../actions";
 
@@ -38,7 +39,7 @@ async function Plan({ params, searchParams }: { params: PageProps<"/workspace/ex
   const { practitioner: p } = await requireWorkspace(`/workspace/exercises/${id}`);
   const plan = await getPlan(p.id, id);
   if (!plan) notFound();
-  const [exercises, base] = await Promise.all([listExercises(p.id), requestBaseUrl()]);
+  const [exercises, base, patients] = await Promise.all([listExercises(p.id), requestBaseUrl(), linkablePatients()]);
   // Retired own exercises still in this plan must stay selectable while editing.
   const known = new Set(exercises.map((e) => e.id));
   const retired = plan.items.filter((i) => !known.has(i.exerciseId)).map((i) => ({
@@ -96,7 +97,7 @@ async function Plan({ params, searchParams }: { params: PageProps<"/workspace/ex
 
       <form action={updatePlanAction} id="edit">
         <input type="hidden" name="planId" value={plan.id} />
-        <PlanFields values={plan} />
+        <PlanFields values={plan} patients={patients} />
         <Section title="Edit exercises" lede="Saving changes updates what the patient sees at the same link.">
           <PlanBuilder
             exercises={[...exercises, ...retired]}

@@ -36,3 +36,13 @@ Scope added on top of SRS v1.0 after reviewing practice-management products (phy
 - **RCP-02** Printable payment receipt (letterhead, receipt no., amount in words, mode, paid to date, balance). Not a tax invoice.
 - **RCP-03** Printable home-exercise prescription on the letterhead (name, degrees, first registration number with authority, first clinic's name/address/phone; no address for home-visit-only physios). Patients can print their plan page too.
 - **RCP-04** Balance-due reminder via WhatsApp click-to-chat from the package card.
+
+## EMR — Patient records (Arun's decision, 10 Nov 2026: full EMR including uploads)
+
+- **EMR-01** Off until the profile owner accepts the patient-records terms (`practice_records_terms`, version `records-2026-11`, text in `src/components/workspace/records-terms.tsx`). The practice is the data fiduciary; the platform processes on its instructions. **Draft — needs counsel review before launch.**
+- **EMR-02** Patient register per practice: name, mobile, sex, birth year, address, emergency contact, referred by, medical history, notes. Ref no `P-00001` per practice. Adding a patient requires confirming the patient's agreement (timestamp stored). Archive/restore; no hard delete in the UI (erasure via support).
+- **EMR-03** Consultation notes: date, type (assessment / follow-up / review / discharge / addendum), complaint, history, pain 0–10, findings, impression, treatment, plan, next visit. Editable only by the author for 24 h; then locked, corrections as addenda.
+- **EMR-04** Timeline per patient: notes, linked plans and home-exercise check-ins, packages, session uses, payments (documents added in EMR-07).
+- **EMR-05** Plans and packages can link to a patient record (same practice only); the label defaults to the patient's first name.
+- **EMR-06** Access: owner; coordinators only with `patients.read` / `patients.manage`. No platform-staff override in the product. Every record open (`patient.view`) and every write is in `audit_events`; clinical text is never copied into the audit trail.
+- **EMR-07** Documents (next PR): private file storage, scanned for type and size, served via short-lived signed links.

@@ -16,6 +16,7 @@ import {
   undoLastSession,
   recordSessionUse,
 } from "@/lib/practice/packages";
+import { patientFirstName } from "@/lib/practice/patients";
 import { requireManage } from "@/lib/workspace/context";
 import { done, failTo, num, opt, rupeesToPaise, str } from "@/lib/workspace/forms";
 
@@ -68,9 +69,12 @@ export async function retireTemplateAction(formData: FormData) {
 export async function sellAction(formData: FormData) {
   try {
     const { viewer, practitioner } = await requireManage();
+    const linked = opt(formData, "practicePatientId");
+    const linkedName = linked ? await patientFirstName(practitioner.id, linked) : null;
     await sellPackage(practitioner.id, viewer.userId, SaleSchema.parse({
       templateId: str(formData, "templateId"),
-      patientLabel: str(formData, "patientLabel"),
+      patientLabel: str(formData, "patientLabel") || linkedName || "",
+      practicePatientId: linked,
       paidPaise: paise(formData, "paidRupees", "Amount paid", false),
       paymentMode: mode(formData),
       startsOn: opt(formData, "startsOn") ?? istToday(),

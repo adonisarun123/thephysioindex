@@ -11,18 +11,24 @@ import {
   setPlanArchived,
   updatePlan,
 } from "@/lib/practice/exercise-plans";
+import { patientFirstName } from "@/lib/practice/patients";
 import { parsePlanForm } from "@/lib/practice/plan-form";
 import { requireManage } from "@/lib/workspace/context";
 import { done, failTo, num, opt, str } from "@/lib/workspace/forms";
 
 const PAGE = "/workspace/exercises";
 
+async function linkedName(practitionerId: string, fd: FormData): Promise<string | null> {
+  const id = opt(fd, "practicePatientId");
+  return id ? patientFirstName(practitionerId, id) : null;
+}
+
 /** HEP-02: create a plan, then land on it with the share options open. */
 export async function createPlanAction(formData: FormData) {
   let planId: string;
   try {
     const { viewer, practitioner } = await requireManage();
-    ({ planId } = await createPlan(practitioner.id, viewer.userId, parsePlanForm(formData)));
+    ({ planId } = await createPlan(practitioner.id, viewer.userId, parsePlanForm(formData, await linkedName(practitioner.id, formData))));
     revalidatePath(PAGE);
   } catch (err) {
     failTo(`${PAGE}/new`, err);
@@ -34,7 +40,7 @@ export async function updatePlanAction(formData: FormData) {
   const planId = str(formData, "planId");
   try {
     const { viewer, practitioner } = await requireManage();
-    await updatePlan(practitioner.id, viewer.userId, planId, parsePlanForm(formData));
+    await updatePlan(practitioner.id, viewer.userId, planId, parsePlanForm(formData, await linkedName(practitioner.id, formData)));
     revalidatePath(PAGE);
   } catch (err) {
     failTo(`${PAGE}/${planId}`, err);

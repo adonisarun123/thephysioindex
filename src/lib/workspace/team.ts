@@ -20,6 +20,8 @@ export const COORDINATOR_PERMISSIONS = [
   { key: "calendar.manage", label: "Edit calendar and leave" },
   { key: "profile.edit", label: "Edit profile draft" },
   { key: "clinics.manage", label: "Manage clinics and services" },
+  { key: "patients.read", label: "View patient records" },
+  { key: "patients.manage", label: "Add and edit patient records" },
 ] as const;
 
 const INVITE_TTL_DAYS = 7;
