@@ -4,6 +4,7 @@ import { db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { normaliseIndianMobile } from "@/lib/messaging/sms";
+import { attachLeadToRegistration } from "@/lib/practitioner-leads";
 import { newPublicId } from "@/lib/public-id";
 import { currentPolicyVersions } from "./catalog";
 import { createClinicBranch, createServiceArea } from "./clinics";
@@ -62,7 +63,7 @@ type Registrant = { userId: string; email: string };
 const DAILY_LIMIT_PER_MOBILE = 3;
 
 /** Creates the draft profile and its first credential, location and consents. Returns the sign-up reference. */
-export async function registerPractitioner(who: Registrant, input: RegistrationInput, attribution: Record<string, string>): Promise<{ practitionerId: string; reference: string }> {
+export async function registerPractitioner(who: Registrant, input: RegistrationInput, attribution: Record<string, string>, leadRef?: string | null): Promise<{ practitionerId: string; reference: string }> {
   const mobile = normaliseIndianMobile(input.mobile);
   if (!mobile) throw new ApiError("INVALID_INPUT", "Enter a valid 10-digit Indian mobile number");
   const email = who.email.toLowerCase();
@@ -107,10 +108,17 @@ export async function registerPractitioner(who: Registrant, input: RegistrationI
   await db().execute(sql`UPDATE users SET mobile = ${mobile} WHERE id = ${who.userId} AND mobile IS NULL`);
 
   // Lead record for operations follow-up and ad attribution, linked by email.
+  // If the quick lead step ran first in this browser, complete that row instead of duplicating it.
+  const regNo = plainText(input.registrationNumber, 60);
+  const attached = await attachLeadToRegistration(leadRef, { mobile, email, fullName: name, city: place.rows[0].city, practiceType: input.practiceMode, registrationNumber: regNo, attribution });
+  if (attached) {
+    await audit({ actorUserId: who.userId, action: "practitioner_signup.register", objectType: "practitioner_signup", objectId: attached.id, changedFields: { practitionerId } });
+    return { practitionerId, reference: attached.reference };
+  }
   const reference = newPublicId();
   const ins = await db().execute<{ id: string }>(sql`
     INSERT INTO practitioner_signups (reference, full_name, mobile, email, city, practice_type, registration_number, attribution, status)
-    VALUES (${reference}, ${name}, ${mobile}, ${email}, ${place.rows[0].city}, ${input.practiceMode}, ${plainText(input.registrationNumber, 60)}, ${JSON.stringify(attribution)}::jsonb, 'onboarding')
+    VALUES (${reference}, ${name}, ${mobile}, ${email}, ${place.rows[0].city}, ${input.practiceMode}, ${regNo}, ${JSON.stringify(attribution)}::jsonb, 'onboarding')
     RETURNING id`);
   await audit({ actorUserId: who.userId, action: "practitioner_signup.create", objectType: "practitioner_signup", objectId: ins.rows[0].id, changedFields: { source: attribution.utm_source ?? null, practitionerId } });
   return { practitionerId, reference };

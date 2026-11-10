@@ -5,11 +5,43 @@ import { ZodError } from "zod";
 import { db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { getViewer } from "@/lib/auth/session";
+import { captureLead, LeadSchema } from "@/lib/practitioner-leads";
 import { ATTRIBUTION_KEYS } from "@/lib/practitioner-signups";
 import { opt, str } from "@/lib/workspace/forms";
 import { RegistrationSchema, registerPractitioner } from "@/lib/workspace/registration";
 
 export type RegisterResult = { error?: string; redirectTo?: string };
+export type LeadResult = { error?: string; reference?: string };
+
+/**
+ * Quick lead step on the ad landing page (owner decision 10 Nov 2026): saves
+ * name, WhatsApp number, city and practice type before the full registration,
+ * so a visitor who stops later can still be called. Creates no account.
+ */
+export async function captureLeadAction(formData: FormData): Promise<LeadResult> {
+  try {
+    if (str(formData, "website")) throw new ApiError("INVALID_INPUT", "Please try again"); // honeypot
+    const input = LeadSchema.parse({
+      fullName: str(formData, "fullName"),
+      mobile: str(formData, "mobile"),
+      city: str(formData, "city"),
+      practiceType: str(formData, "practiceType"),
+      consentContact: formData.get("consentContact") === "on",
+    });
+    const attribution: Record<string, string> = {};
+    for (const k of ATTRIBUTION_KEYS) {
+      const v = opt(formData, k);
+      if (v) attribution[k] = v.slice(0, 200);
+    }
+    const { reference } = await captureLead(input, attribution);
+    return { reference };
+  } catch (err) {
+    if (err instanceof ZodError) return { error: err.issues[0]?.message ?? "Check the form and try again" };
+    if (err instanceof ApiError) return { error: err.message };
+    console.error("captureLeadAction failed", err);
+    return { error: "Something went wrong. Please try again." };
+  }
+}
 
 const FIELD_LABELS: Record<string, string> = {
   fullName: "Full name", mobile: "Mobile", degree: "Qualification", institution: "College or university", authorityId: "Registered with",
@@ -59,7 +91,7 @@ export async function registerPhysio(formData: FormData): Promise<RegisterResult
       if (v) attribution[k] = v.slice(0, 200);
     }
 
-    const { reference } = await registerPractitioner({ userId: viewer.userId, email: viewer.email }, input, attribution);
+    const { reference } = await registerPractitioner({ userId: viewer.userId, email: viewer.email }, input, attribution, opt(formData, "leadRef"));
     return { redirectTo: `/for-physiotherapists/join/thank-you?ref=${reference}` };
   } catch (err) {
     if (err instanceof ZodError) {

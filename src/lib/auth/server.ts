@@ -158,8 +158,9 @@ export const auth = betterAuth({
       // plain user (kind 'patient' until /api/v1/me/intent marks it practitioner);
       // staff roles are still granted only by an administrator (IAM-02).
       disableSignUp: false,
-      sendVerificationOTP: async ({ email: to, otp, type }) => {
-        const subject = type === "sign-in" ? "Your The Physio Index sign-in code" : "Your The Physio Index verification code";
+      sendVerificationOTP: async ({ email: to, otp }) => {
+        // One code serves sign-in and sign-up (registration verifies email via type "sign-in"), so the subject names neither.
+        const subject = `${otp} is your The Physio Index code`;
         await email().send(to, subject, `Your code is ${otp}. It expires in ${Math.round(OTP_TTL_SECONDS / 60)} minutes. If you did not request this, ignore this email.`);
       },
     }),
