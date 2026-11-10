@@ -5,21 +5,27 @@ import { connection } from "next/server";
 import { requireViewer } from "@/lib/auth/session";
 import { listPatientBookings } from "@/lib/booking/queries";
 import { formatLocal, nowMs } from "@/lib/booking/time";
+import { Notice } from "@/components/workspace/forms/ui";
+import { featureEnabled } from "@/lib/config";
+import { readMessage } from "@/lib/workspace/forms";
+import { notificationPrefs } from "@/lib/workspace/queries";
+import { saveWhatsAppAction } from "./actions";
 
 export const metadata: Metadata = { title: "My account", robots: { index: false } };
 
-export default function Page() {
+export default function Page({ searchParams }: PageProps<"/account">) {
   return (
     <Suspense fallback={<div className="mx-auto max-w-3xl px-4 py-12 text-muted">Loading…</div>}>
-      <Account />
+      <Account searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Account() {
+async function Account({ searchParams }: { searchParams: PageProps<"/account">["searchParams"] }) {
   await connection();
   const v = await requireViewer("/account");
-  const bookings = await listPatientBookings(v.userId);
+  const [bookings, waEnabled, prefs, sp] = await Promise.all([listPatientBookings(v.userId), featureEnabled("messaging.whatsapp"), notificationPrefs(v.userId), searchParams]);
+  const msg = readMessage(sp);
   const now = nowMs();
   const upcoming = bookings.filter((b) => b.status === "confirmed" && Date.parse(b.endsAt) > now).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const past = bookings.filter((b) => !upcoming.includes(b)).slice(0, 10);
@@ -34,6 +40,7 @@ async function Account() {
           <button className="btn btn-quiet py-2" type="submit">Sign out</button>
         </form>
       </div>
+      <Notice ok={msg.ok} error={msg.error} />
       <section className="card mt-8 p-6">
         <h2 className="text-lg font-semibold">Upcoming appointments</h2>
         {upcoming.length === 0 ? (
@@ -73,6 +80,19 @@ async function Account() {
           <p className="mt-2 text-sm text-muted">
             <Link href="/for-physiotherapists" className="underline">Create or claim your professional profile</Link> using this account.
           </p>
+        </section>
+      ) : null}
+      {waEnabled ? (
+        <section className="card mt-4 p-6">
+          <h2 className="text-lg font-semibold">Booking updates on WhatsApp</h2>
+          <form action={saveWhatsAppAction} className="mt-2 grid gap-3 text-sm">
+            <label className="flex items-start gap-2">
+              <input type="checkbox" name="whatsappOptIn" className="mt-1" defaultChecked={prefs.whatsappOptIn} />
+              <span>Send confirmations, reminders and changes to my verified mobile on WhatsApp instead of SMS. No promotional messages.</span>
+            </label>
+            {!v.mobileVerified ? <p className="text-muted">Verify your mobile number first; until then updates come by email.</p> : null}
+            <div><button type="submit" className="btn btn-secondary py-2 text-sm">Save</button></div>
+          </form>
         </section>
       ) : null}
       <section className="card mt-4 p-6">

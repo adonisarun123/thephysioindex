@@ -249,12 +249,14 @@ export const POLICIES: {
   },
 ];
 
-export const NOTIFICATION_TEMPLATES: {
+type NotificationTemplateSeed = {
   eventType: string;
   channel: "in_app" | "sms" | "email" | "whatsapp";
   subject?: string;
   body: string;
-}[] = [
+};
+
+const BASE_NOTIFICATION_TEMPLATES: NotificationTemplateSeed[] = [
   {
     eventType: "booking.confirmed",
     channel: "sms",
@@ -375,4 +377,19 @@ export const NOTIFICATION_TEMPLATES: {
     channel: "sms",
     body: "How was your appointment {{reference}}? Share a review (2 min): {{reviewUrl}} - The Physio Index",
   },
+];
+
+/**
+ * WAP-03: a WhatsApp twin of every SMS template, same wording without the SMS
+ * sign-off. Each needs an approved Meta template whose body has the same
+ * variables in the same order ({{1}}, {{2}} …); its name goes in
+ * provider_template_id (admin → Policies and templates).
+ */
+export const NOTIFICATION_TEMPLATES: NotificationTemplateSeed[] = [
+  ...BASE_NOTIFICATION_TEMPLATES,
+  ...BASE_NOTIFICATION_TEMPLATES.filter((t) => t.channel === "sms").map((t) => ({
+    eventType: t.eventType,
+    channel: "whatsapp" as const,
+    body: t.body.replace(/\s+-\s+The Physio Index$/, ""),
+  })),
 ];
