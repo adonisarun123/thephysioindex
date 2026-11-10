@@ -8,6 +8,7 @@ import { istToday } from "@/lib/practice/exercise-plans";
 import { listPayments, listSold, listTemplates, PAYMENT_MODES, perSessionPaise, type PackageFilter } from "@/lib/practice/packages";
 import { whatsappShareUrl } from "@/lib/practice/exercise-plans";
 import { requireWorkspace } from "@/lib/workspace/context";
+import { linkablePatients } from "@/lib/practice/patient-links";
 import { readMessage } from "@/lib/workspace/forms";
 import { createTemplateAction, packageAction, retireTemplateAction, sellAction } from "./actions";
 
@@ -30,7 +31,8 @@ async function Packages({ searchParams }: { searchParams: PageProps<"/workspace/
   const sp = await searchParams;
   const show: PackageFilter = sp.show === "closed" ? "closed" : "active";
   const { practitioner: p } = await requireWorkspace("/workspace/packages");
-  const [templates, sold] = await Promise.all([listTemplates(p.id), listSold(p.id, show)]);
+  const [templates, sold, patients] = await Promise.all([listTemplates(p.id), listSold(p.id, show), linkablePatients()]);
+  const preselect = typeof sp.patient === "string" ? patients.find((x) => x.id === sp.patient) : undefined;
   const payments = await listPayments(p.id, sold.map((x) => x.id));
   const msg = readMessage(sp);
   const today = istToday();
@@ -144,7 +146,15 @@ async function Packages({ searchParams }: { searchParams: PageProps<"/workspace/
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name} — {t.sessions} sessions, {formatPaise(t.pricePaise)}</option>)}
               </select>
             </Field>
-            <Field label="Patient (first name or initials)" htmlFor="patientLabel"><input id="patientLabel" name="patientLabel" className="input" required maxLength={40} placeholder="e.g. Meena S" /></Field>
+            <Field label="Patient (first name or initials)" htmlFor="patientLabel"><input id="patientLabel" name="patientLabel" className="input" maxLength={40} placeholder="e.g. Meena S" defaultValue={preselect?.firstName} /></Field>
+            {patients.length ? (
+              <Field label="Patient record (optional)" htmlFor="practicePatientId" hint="Links the package to the patient's timeline.">
+                <select id="practicePatientId" name="practicePatientId" className="input" defaultValue={preselect?.id ?? ""}>
+                  <option value="">Not linked</option>
+                  {patients.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                </select>
+              </Field>
+            ) : null}
             <Field label="Paid now (₹)" htmlFor="paidRupees" hint="Leave blank if nothing is paid yet."><input id="paidRupees" name="paidRupees" className="input" inputMode="decimal" /></Field>
             <Field label="Payment mode" htmlFor="paymentMode">
               <select id="paymentMode" name="paymentMode" className="input" defaultValue="upi">

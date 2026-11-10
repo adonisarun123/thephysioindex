@@ -176,7 +176,9 @@ async function main() {
     AND NOT EXISTS (SELECT 1 FROM import_rows x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM content_articles x WHERE x.author_practitioner_id = p.id)
     AND NOT EXISTS (SELECT 1 FROM duplicate_candidates x WHERE x.practitioner_a_id = p.id OR x.practitioner_b_id = p.id)
     AND NOT EXISTS (SELECT 1 FROM exercise_plans x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM exercises x WHERE x.practitioner_id = p.id)
-    AND NOT EXISTS (SELECT 1 FROM package_templates x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM patient_packages x WHERE x.practitioner_id = p.id)`;
+    AND NOT EXISTS (SELECT 1 FROM package_templates x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM patient_packages x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM practice_patients x WHERE x.practitioner_id = p.id) AND NOT EXISTS (SELECT 1 FROM practice_records_terms x WHERE x.practitioner_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM practice_counters x WHERE x.practitioner_id = p.id)`;
   await db.execute(sql`
     WITH tp AS (${keepSql}),
          tb AS (SELECT b.id FROM branches b JOIN clinics c ON c.id = b.clinic_id WHERE c.name LIKE 'TEST %')

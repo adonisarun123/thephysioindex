@@ -52,6 +52,7 @@ export const exercisePlans = pgTable(
     id: id(),
     practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
     patientLabel: text("patient_label").notNull(),
+    practicePatientId: uuid("practice_patient_id"), // EMR-05: optional link to a patient record (FK in migration)
     title: text("title").notNull(),
     advice: text("advice"),
     state: text("state").notNull().default("active"), // active | archived
@@ -126,6 +127,7 @@ export const patientPackages = pgTable(
     templateId: uuid("template_id").references(() => packageTemplates.id),
     name: text("name").notNull(),
     patientLabel: text("patient_label").notNull(),
+    practicePatientId: uuid("practice_patient_id"), // EMR-05: optional link to a patient record (FK in migration)
     sessionsTotal: smallint("sessions_total").notNull(),
     pricePaise: integer("price_paise").notNull(),
     paidPaise: integer("paid_paise").notNull().default(0),
@@ -183,4 +185,69 @@ export const practiceCounters = pgTable(
     nextValue: integer("next_value").notNull().default(1),
   },
   (t) => [uniqueIndex("practice_counters_uq").on(t.practitionerId, t.kind)],
+);
+
+// ---------------------------------------------------------------- Patient records (EMR-01..07)
+
+/**
+ * EMR-01: the practitioner's acceptance of the patient-records terms (the
+ * platform processes these records on the practitioner's behalf; DPDP Act
+ * processor role). Patient records stay locked until accepted.
+ */
+export const practiceRecordsTerms = pgTable("practice_records_terms", {
+  practitionerId: uuid("practitioner_id").primaryKey().references(() => practitioners.id),
+  termsVersion: text("terms_version").notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+  acceptedBy: uuid("accepted_by").notNull().references(() => users.id),
+});
+
+/** EMR-02: a patient of one practice. Not linked to platform accounts; visible only inside that practice. */
+export const practicePatients = pgTable(
+  "practice_patients",
+  {
+    id: id(),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    refNo: text("ref_no").notNull(),
+    fullName: text("full_name").notNull(),
+    mobile: text("mobile"), // E.164
+    sex: text("sex"), // female | male | other
+    birthYear: smallint("birth_year"),
+    address: text("address"),
+    emergencyContact: text("emergency_contact"),
+    referredBy: text("referred_by"),
+    medicalHistory: text("medical_history"), // conditions, medicines, allergies, surgeries
+    notes: text("notes"),
+    consentRecordedAt: timestamp("consent_recorded_at", { withTimezone: true }).notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("practice_patients_ref_uq").on(t.practitionerId, t.refNo),
+    index("practice_patients_practitioner_idx").on(t.practitionerId, t.archivedAt, t.fullName),
+    index("practice_patients_mobile_idx").on(t.practitionerId, t.mobile),
+  ],
+);
+
+/** EMR-03: consultation / treatment note. Editable by its author for 24 h, then locked; corrections are addendum notes. */
+export const patientVisits = pgTable(
+  "patient_visits",
+  {
+    id: id(),
+    patientId: uuid("patient_id").notNull().references(() => practicePatients.id),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    visitOn: date("visit_on").notNull(),
+    kind: text("kind").notNull(), // assessment | follow_up | review | discharge | addendum
+    chiefComplaint: text("chief_complaint"),
+    history: text("history"),
+    painScore: smallint("pain_score"),
+    findings: text("findings"), // observation, ROM, strength, special tests
+    diagnosis: text("diagnosis"), // clinical impression
+    treatmentGiven: text("treatment_given"),
+    plan: text("plan"), // goals, frequency, home advice
+    nextVisitOn: date("next_visit_on"),
+    createdBy: uuid("created_by").notNull().references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [index("patient_visits_patient_idx").on(t.patientId, t.visitOn)],
 );
