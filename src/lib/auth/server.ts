@@ -80,7 +80,8 @@ export const auth = betterAuth({
       create: {
         after: async (user) => {
           // Mirror into the application users table (Section 20). No secrets are copied (IAM-06).
-          const phone = (user as { phoneNumber?: string | null }).phoneNumber ?? null;
+          const u = user as { phoneNumber?: string | null; phoneNumberVerified?: boolean; emailVerified?: boolean };
+          const phone = u.phoneNumber ?? null;
           await db()
             .insert(appSchema.users)
             .values({
@@ -90,6 +91,16 @@ export const auth = betterAuth({
               displayName: user.name,
             })
             .onConflictDoNothing();
+          // An OTP sign-up creates the user already verified and no update follows,
+          // so copy the verified flags here or dispatch never finds a contact (MSG-01).
+          // Skipped when another account already holds the same verified address.
+          await db().execute(sql`
+            UPDATE users SET
+              mobile_verified_at = CASE WHEN ${u.phoneNumberVerified ?? false} AND mobile IS NOT NULL AND mobile_verified_at IS NULL
+                AND NOT EXISTS (SELECT 1 FROM users o WHERE o.mobile = users.mobile AND o.mobile_verified_at IS NOT NULL AND o.id <> users.id) THEN now() ELSE mobile_verified_at END,
+              email_verified_at = CASE WHEN ${u.emailVerified ?? false} AND email IS NOT NULL AND email_verified_at IS NULL
+                AND NOT EXISTS (SELECT 1 FROM users o WHERE lower(o.email) = lower(users.email) AND o.email_verified_at IS NOT NULL AND o.id <> users.id) THEN now() ELSE email_verified_at END
+            WHERE auth_subject = ${user.id}`);
         },
       },
       update: {

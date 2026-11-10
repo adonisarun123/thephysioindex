@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
+import { inboxCounts } from "@/lib/practice/enquiries";
 import { requireWorkspace } from "@/lib/workspace/context";
 
 export const metadata = { robots: { index: false, follow: false } };
@@ -20,8 +21,10 @@ async function Shell({ children }: { children: React.ReactNode }) {
   const h = await headers();
   const current = h.get("x-pathname") ?? "/workspace";
   const { practitioner } = await requireWorkspace(current);
+  const inbox = await inboxCounts(practitioner.id);
+  const badge = inbox.unanswered + inbox.due;
   return (
-    <WorkspaceShell practitionerName={practitioner.displayName} status={practitioner.listingStatus} current={current}>
+    <WorkspaceShell practitionerName={practitioner.displayName} status={practitioner.listingStatus} current={current} enquiryBadge={badge ? String(badge) : undefined}>
       {children}
     </WorkspaceShell>
   );
