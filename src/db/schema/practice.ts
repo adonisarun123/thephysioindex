@@ -95,3 +95,61 @@ export const exercisePlanCheckins = pgTable(
   },
   (t) => [uniqueIndex("exercise_plan_checkins_uq").on(t.planId, t.day)],
 );
+
+/**
+ * PKG-01: session package a practitioner sells at the practice (e.g. 10
+ * sessions). Not shown publicly and not sold online: no price claim is
+ * published and booking prices are unchanged (OFR-06 untouched).
+ */
+export const packageTemplates = pgTable(
+  "package_templates",
+  {
+    id: id(),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    name: text("name").notNull(),
+    sessions: smallint("sessions").notNull(),
+    pricePaise: integer("price_paise").notNull(),
+    validityDays: smallint("validity_days").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [index("package_templates_practitioner_idx").on(t.practitionerId, t.isActive)],
+);
+
+/** PKG-02: a package sold to one patient. Sessions and price are snapshots (OFR-02). */
+export const patientPackages = pgTable(
+  "patient_packages",
+  {
+    id: id(),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    templateId: uuid("template_id").references(() => packageTemplates.id),
+    name: text("name").notNull(),
+    patientLabel: text("patient_label").notNull(),
+    sessionsTotal: smallint("sessions_total").notNull(),
+    pricePaise: integer("price_paise").notNull(),
+    paidPaise: integer("paid_paise").notNull().default(0),
+    paymentMode: text("payment_mode"), // cash | upi | card | bank | other
+    startsOn: date("starts_on").notNull(),
+    expiresOn: date("expires_on").notNull(),
+    state: text("state").notNull().default("active"), // active | closed
+    note: text("note"),
+    createdBy: uuid("created_by").references(() => users.id),
+    ...timestamps,
+  },
+  (t) => [index("patient_packages_practitioner_idx").on(t.practitionerId, t.state, t.expiresOn)],
+);
+
+/** PKG-03: one row per session used. Undo deletes the latest row (audited). */
+export const packageSessionUses = pgTable(
+  "package_session_uses",
+  {
+    id: id(),
+    packageId: uuid("package_id").notNull().references(() => patientPackages.id, { onDelete: "cascade" }),
+    usedOn: date("used_on").notNull(),
+    note: text("note"),
+    createdBy: uuid("created_by").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("package_session_uses_package_idx").on(t.packageId, t.usedOn)],
+);
