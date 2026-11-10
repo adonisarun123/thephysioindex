@@ -134,6 +134,20 @@
       "when": 1794294273565,
       "tag": "0018_patient_records_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794294804034,
+      "tag": "0019_patient_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794294805076,
+      "tag": "0020_patient_documents_guards",
+      "breakpoints": true
     }
   ]
 }

@@ -301,6 +301,9 @@ export async function patientTimeline(practitionerId: string, patientId: string)
       UNION ALL
       SELECT pay.received_on::text, 'payment', 'Payment ' || pay.receipt_no, '₹' || (pay.amount_paise / 100), '/workspace/packages/receipts/' || pay.id
       FROM package_payments pay JOIN patient_packages pp ON pp.id = pay.package_id WHERE pp.practice_patient_id = ${patientId} AND pp.practitioner_id = ${practitionerId}
+      UNION ALL
+      SELECT coalesce(d.doc_date, (d.created_at AT TIME ZONE 'Asia/Kolkata')::date)::text, 'document', 'Document: ' || d.title, d.category, '/api/v1/patient-documents?id=' || d.id
+      FROM patient_documents d WHERE d.patient_id = ${patientId} AND d.practitioner_id = ${practitionerId} AND d.deleted_at IS NULL
     ) t
     ORDER BY at DESC, kind
     LIMIT 300`);
