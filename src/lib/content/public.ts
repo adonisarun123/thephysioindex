@@ -160,6 +160,18 @@ export async function listRelated(kind: ContentKind, excludeId: string, specialt
   return res.rows.map(toSummary);
 }
 
+/** Published guides written by one physiotherapist, newest first, for their profile page (internal links both ways). */
+export async function listPublishedByPractitioner(practitionerId: string, limit = 6): Promise<ArticleSummary[]> {
+  const res = await db().execute<Row>(sql`
+    SELECT ${SUMMARY_COLUMNS}
+    FROM content_articles a LEFT JOIN specialties s ON s.id = a.primary_specialty_id
+    WHERE a.kind = 'blog' AND a.status = 'published' AND a.author_practitioner_id = ${practitionerId}
+    ORDER BY a.published_at DESC
+    LIMIT ${limit}
+  `);
+  return res.rows.map(toSummary);
+}
+
 /** Distinct tags / specialties / categories in use on published items, for filter pills. */
 export async function listFacets(kind: ContentKind): Promise<{ specialties: { label: string; slug: string; n: number }[]; tags: string[]; categories: string[] }> {
   const [sp, tg, ct] = await Promise.all([
