@@ -155,6 +155,21 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
               </div>
             ) : null}
 
+            {open.has("specialty") ? (
+              <fieldset>
+                <legend className="label">Other areas you treat <span className="font-normal text-muted">(optional, tick any)</span></legend>
+                <div className="mt-1 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
+                  {specialties.map((s) => (
+                    <label key={s.id} className="flex items-center gap-1.5">
+                      <input type="checkbox" name="otherSpecialtyIds" value={s.id} />
+                      {s.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-muted">Patients search by these. Tick only what you actually treat, up to seven.</p>
+              </fieldset>
+            ) : null}
+
             {open.has("services") ? (
               <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
                 <div>

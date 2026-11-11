@@ -20,11 +20,15 @@ import { listAssociations } from "./queries";
  */
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** SpecialtiesSchema allows eight in total, one of them primary. */
+export const MAX_SPECIALTIES = 8;
 
 export const FinishSchema = z
   .object({
     about: z.string().trim().min(ABOUT_MIN_CHARS, `About you needs at least ${ABOUT_MIN_CHARS} characters`).max(3000).optional(),
     primarySpecialtyId: z.uuid("Choose your main area of practice").optional(),
+    /** Other areas they treat, ticked on the finish screen (owner request 11 Nov 2026). Optional; never blocks submission. */
+    otherSpecialtyIds: z.array(z.uuid()).max(MAX_SPECIALTIES - 1, `Choose up to ${MAX_SPECIALTIES - 1} other areas`).optional(),
     languageIds: z.array(z.uuid()).min(1, "Choose at least one language").optional(),
     service: z.object({ serviceId: z.uuid("Choose a service"), displayName: z.string().trim().min(2).max(120), feePaise: z.number().int().min(0).max(10_000_000) }).optional(),
     hours: z
@@ -51,8 +55,7 @@ export async function finishProfile(practitionerId: string, userId: string, list
   }
   if (input.about) await saveDraftSection(practitionerId, userId, "about", plainText(input.about, 3000));
   if (input.primarySpecialtyId) {
-    const others = (d.specialties ?? []).filter((s) => s.specialtyId !== input.primarySpecialtyId).map((s) => ({ ...s, isPrimary: false }));
-    await saveDraftSection(practitionerId, userId, "specialties", [{ specialtyId: input.primarySpecialtyId, isPrimary: true }, ...others]);
+    await saveDraftSection(practitionerId, userId, "specialties", mergeSpecialties(d.specialties ?? [], input.primarySpecialtyId, input.otherSpecialtyIds ?? []));
   }
   if (input.languageIds) await saveDraftSection(practitionerId, userId, "languages", input.languageIds);
   if (input.consent && !before.consents) {
@@ -107,4 +110,10 @@ export async function finishProfile(practitionerId: string, userId: string, list
     submitted = true;
   }
   return { percent, submitted, gaps };
+}
+
+/** Primary first, then the newly ticked areas, then any already saved; de-duplicated and capped at the schema limit. */
+export function mergeSpecialties(existing: { specialtyId: string; isPrimary: boolean }[], primaryId: string, otherIds: string[]): { specialtyId: string; isPrimary: boolean }[] {
+  const ids = [primaryId, ...otherIds, ...existing.map((s) => s.specialtyId)];
+  return Array.from(new Set(ids)).slice(0, MAX_SPECIALTIES).map((specialtyId) => ({ specialtyId, isPrimary: specialtyId === primaryId }));
 }

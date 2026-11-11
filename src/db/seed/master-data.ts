@@ -54,6 +54,11 @@ export const SERVICES: { code: string; label: string; kind: "initial_assessment"
   { code: "electrotherapy_session", label: "Electrotherapy session", kind: "procedure" },
   { code: "exercise_program", label: "Exercise programme session", kind: "follow_up" },
   { code: "posture_ergonomic", label: "Posture and ergonomic consultation", kind: "initial_assessment" },
+  // Appended (owner request 11 Nov 2026): common services practitioners list. Append only, so existing sort order is unchanged.
+  { code: "home_visit_session", label: "Home visit session", kind: "follow_up", description: "Treatment session at the patient's home" },
+  { code: "balance_gait_session", label: "Balance and gait training session", kind: "follow_up" },
+  { code: "cupping_session", label: "Cupping therapy session", kind: "procedure" },
+  { code: "iastm_session", label: "IASTM session", kind: "procedure", description: "Instrument-assisted soft tissue mobilisation" },
 ];
 
 export const CREDENTIAL_AUTHORITIES: {

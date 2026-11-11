@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { PhysioRegistration } from "@/components/auth/physio-registration";
 import { GoogleAdsTag } from "@/components/google-ads-tag";
 import { getViewer } from "@/lib/auth/session";
+import { KEEP_READY } from "@/lib/content/physio-onboarding";
 import { ATTRIBUTION_KEYS } from "@/lib/practitioner-signups";
 import { listAuthorityOptions, listStateOptions } from "@/lib/workspace/catalog";
 
@@ -53,7 +54,16 @@ export default function Page({ searchParams }: PageProps<"/for-physiotherapists/
           </div>
           <div id="register" className="card p-5 text-foreground sm:p-6">
             <h2 className="text-xl font-semibold tracking-tight">Register free</h2>
-            <p className="mt-1 text-sm text-muted">About two minutes. Keep your registration number handy. Nothing is public until we have verified it.</p>
+            <p className="mt-1 text-sm text-muted">About two minutes. Nothing is public until we have verified your registration.</p>
+            <details className="mt-3 rounded-[var(--r-card)] bg-brand-soft p-3 text-sm">
+              <summary className="cursor-pointer font-medium">What to keep ready (4 things)</summary>
+              <ul className="mt-2 grid gap-1.5">
+                {KEEP_READY.map((i) => (
+                  <li key={i.title} className="flex gap-2"><span aria-hidden>✓</span><span>{i.title}</span></li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-muted">Not sure about something? Leave your name and WhatsApp number and we will call you.</p>
+            </details>
             <Suspense fallback={<p className="mt-5 text-sm text-muted">Loading the form…</p>}>
               <FormWithParams searchParams={searchParams} />
             </Suspense>
