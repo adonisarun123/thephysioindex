@@ -16,6 +16,10 @@ export const metadata: Metadata = {
     "India-wide physiotherapist directory. Compare qualifications, registrations, fees and availability by state, city and locality, then book an appointment.",
   applicationName: "The Physio Index",
   openGraph: { type: "website", siteName: "The Physio Index", locale: "en_IN" },
+  twitter: { card: "summary_large_image" },
+  alternates: {
+    types: { "application/rss+xml": [{ url: "/blog/feed.xml", title: "The Physio Index — Guides" }, { url: "/news/feed.xml", title: "The Physio Index — News" }] },
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

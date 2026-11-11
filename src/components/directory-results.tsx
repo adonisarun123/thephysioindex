@@ -4,8 +4,12 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { languages, specialties } from "@/db/schema";
 import { searchPractitioners, type SearchFilters } from "@/lib/directory";
+import { formatPaise } from "@/lib/money";
+import { ldJson, practitionerItemListJsonLd } from "@/lib/seo/jsonld";
 import { EmptyCoverage } from "./empty-coverage";
 import { PractitionerCardRow } from "./practitioner-card";
+
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
 
 export type RawSearchParams = Record<string, string | string[] | undefined>;
 
@@ -69,6 +73,21 @@ export async function DirectoryResults({
       properties: { hasQuery: Boolean(filters.q), specialty: filters.specialtySlug, language: filters.languageCode, bookableOnly: filters.bookable, resultBucket: resultBucket(result.items.length), page: "first" },
     });
   }
+  // SEO-03/AEO: on the unfiltered first page, state what the page lists in one plain sentence
+  // and mirror the visible list as ItemList. Built only from the rows shown (DIR-14).
+  const canonicalView = !active && !filters.cursor && !filters.sort && result.items.length > 0;
+  const fees = result.items.map((c) => c.startingFeePaise).filter((v): v is number => v != null);
+  const bookableCount = result.items.filter((c) => c.bookable).length;
+  const summary = canonicalView
+    ? [
+        `The Physio Index lists ${result.total} ${result.total === 1 ? "physiotherapist" : "physiotherapists"} in ${scopeLabel}.`,
+        "Each profile was checked by a reviewer before it was published and shows qualifications, registration status, areas of practice and where the physiotherapist works.",
+        fees.length ? `Published fees on this page start from ${formatPaise(Math.min(...fees))} per session.` : "",
+        bookableCount ? `${bookableCount} of the profiles shown can be booked online; the others take enquiries.` : "Appointments are arranged by sending an enquiry from a profile.",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : null;
   const nextHref = result.nextCursor ? `${basePath}?${new URLSearchParams({ ...stripCursor(filters), cursor: result.nextCursor }).toString()}` : null;
 
   return (
@@ -145,6 +164,17 @@ export async function DirectoryResults({
       </form>
 
       <div>
+        {canonicalView ? (
+          <>
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: ldJson(practitionerItemListJsonLd({ siteUrl: SITE_URL, pagePath: basePath, name: `Physiotherapists in ${scopeLabel}`, total: result.total, items: result.items })),
+              }}
+            />
+            <p className="mb-4 max-w-3xl text-sm leading-relaxed text-ink-2">{summary}</p>
+          </>
+        ) : null}
         <p className="text-sm text-muted" aria-live="polite">
           {result.total === 0 ? "No matching physiotherapists" : `${result.total} ${result.total === 1 ? "physiotherapist" : "physiotherapists"}`} in {scopeLabel}
           {active ? " matching your filters" : ""}. Ranking {result.rankingVersion}.
