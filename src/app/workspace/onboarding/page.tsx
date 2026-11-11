@@ -5,6 +5,9 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { CompletionMeter } from "@/components/workspace/completion-meter";
 import { Notice } from "@/components/workspace/forms/ui";
+import { PhotoUploader } from "@/components/workspace/photo-uploader";
+import { imageKitEnabled } from "@/lib/media/imagekit";
+import { photoState } from "@/lib/workspace/photo";
 import { getViewer } from "@/lib/auth/session";
 import { listAuthorityOptions, listLanguageOptions, listServiceOptions, listSpecialtyOptions } from "@/lib/workspace/catalog";
 import { WEEKDAYS } from "@/lib/workspace/calendar";
@@ -53,12 +56,13 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
   const msg = readMessage(sp);
   const awaitingReview = status.versionState !== "draft" && status.versionState !== null;
 
-  const [specialties, languages, services, authorities, associations] = await Promise.all([
+  const [specialties, languages, services, authorities, associations, photo] = await Promise.all([
     open.has("specialty") ? listSpecialtyOptions() : Promise.resolve([]),
     open.has("languages") ? listLanguageOptions() : Promise.resolve([]),
     open.has("services") ? listServiceOptions() : Promise.resolve([]),
     open.has("registration") ? listAuthorityOptions() : Promise.resolve([]),
     listAssociations(practitioner.id),
+    photoState(practitioner.id),
   ]);
   const live = associations.filter((a) => a.state !== "ended" && a.state !== "rejected");
   const place = live[0] ? (live[0].kind === "service_area" ? `offering home visits in ${live[0].localityName}, ${live[0].cityName}` : `at ${live[0].clinicName}, ${live[0].localityName}, ${live[0].cityName}`) : "";
@@ -83,7 +87,7 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
 
         <div className="card mt-6 p-5"><CompletionMeter items={items} compact submitted={awaitingReview} /></div>
 
-        {open.size === 0 || awaitingReview ? (
+        {awaitingReview ? (
           <div className="card mt-6 p-5">
             <p className="font-medium">{awaitingReview ? "Your profile is with our team for verification." : "Your profile is complete."}</p>
             <p className="mt-1 text-sm text-muted">{awaitingReview ? "We check your registration and email you once it is live." : "Submit it from your workspace."}</p>
@@ -91,6 +95,8 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
           </div>
         ) : (
           <form action={finishProfileAction} className="card mt-6 grid gap-6 p-5">
+            {/* Always shown (not only when open) so the form keeps its typed values when the page refreshes after an upload. */}
+            {imageKitEnabled() ? <PhotoUploader compact displayName={name} publishedUrl={photo.published?.url ?? null} pending={photo.pending} enabled /> : null}
             {open.has("basics") ? (
               <fieldset className="grid gap-3 sm:grid-cols-2">
                 <legend className="mb-2 font-semibold">Qualification</legend>

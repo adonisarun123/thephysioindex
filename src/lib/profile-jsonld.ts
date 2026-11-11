@@ -14,6 +14,7 @@ export function practitionerJsonLd(p: PublicProfile, siteUrl: string) {
     "@id": `${url}#person`,
     url,
     name: p.displayName,
+    ...(p.photo ? { image: p.photo.large } : {}),
     jobTitle: p.designation ?? "Physiotherapist",
     description: p.headline ?? undefined,
     hasOccupation: { "@type": "Occupation", name: "Physiotherapist" },

@@ -4,6 +4,8 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/admin/admin-shell";
 import { CaseSubject } from "@/components/admin/case-subject";
+import { PhotoPanel } from "@/components/admin/practitioner-panels";
+import { photoState } from "@/lib/workspace/photo";
 import { DL, Field, Hidden, Input, Notice, Pill, Section, Select, Textarea } from "@/components/admin/ui";
 import { getCase, listCaseEvents, loadSubject, queueRole } from "@/lib/admin/cases";
 import { canDecide, type Decision } from "@/lib/admin/decisions";
@@ -64,7 +66,8 @@ async function CasePage({ params, searchParams }: { params: PageProps<"/admin/ca
   const c = await getCase(id);
   if (!c) notFound();
   if (!hasRole(v, queueRole(c.caseType)) && !hasRole(v, "super_admin")) notFound();
-  const [events, subject] = await Promise.all([listCaseEvents(id), loadSubject(c.subjectType, c.subjectId)]);
+  const showPhoto = Boolean(c.practitionerId) && (c.caseType === "listing_review" || c.caseType === "profile_change");
+  const [events, subject, photo] = await Promise.all([listCaseEvents(id), loadSubject(c.subjectType, c.subjectId), showPhoto && c.practitionerId ? photoState(c.practitionerId) : Promise.resolve(null)]);
   const decided = c.state === "decided" || c.state === "closed";
   const options = decisionsFor(c.caseType).filter((d) => canDecide(v, c.caseType, d));
   const self = `/admin/cases/${id}`;
@@ -81,6 +84,7 @@ async function CasePage({ params, searchParams }: { params: PageProps<"/admin/ca
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
         <div>
           <CaseSubject subjectType={c.subjectType} subject={subject} />
+          {photo && c.practitionerId ? <PhotoPanel practitionerId={c.practitionerId} photo={photo} canReview={false} /> : null}
 
           <Section title="Timeline">
             <ol className="text-sm">

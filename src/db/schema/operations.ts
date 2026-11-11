@@ -189,6 +189,8 @@ export const mediaAssets = pgTable(
   {
     id: id(),
     objectKey: text("object_key").notNull(),
+    // Provider-side id (ImageKit fileId) for public profile media; null for private Blob objects.
+    externalId: text("external_id"),
     ownerUserId: uuid("owner_user_id").references(() => users.id),
     practitionerId: uuid("practitioner_id").references(() => practitioners.id),
     purpose: mediaPurpose("purpose").notNull(),
@@ -209,6 +211,7 @@ export const mediaAssets = pgTable(
   (t) => [
     uniqueIndex("media_assets_object_key_uq").on(t.objectKey),
     index("media_assets_owner_idx").on(t.ownerUserId, t.purpose),
+    index("media_assets_practitioner_idx").on(t.practitionerId, t.purpose),
     check("media_assets_bytes_pos", sql`${t.bytes} > 0`),
     // Certificates and identity documents are never public (PRO-12).
     check("media_assets_private_purposes", sql`${t.visibility} = 'private' OR ${t.purpose} IN ('profile_photo', 'portfolio', 'clinic_photo')`),

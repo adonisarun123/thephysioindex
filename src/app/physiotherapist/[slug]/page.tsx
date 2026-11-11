@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: PageProps<"/physiotherapist/[
       p.headline ??
       `${p.displayName} — ${p.specialties.map((s) => s.label).slice(0, 3).join(", ") || "physiotherapy"}${where}. Qualifications, registrations, fees and appointment booking.`,
     alternates: { canonical: p.path },
-    openGraph: { type: "profile", title: p.displayName, description: p.headline ?? undefined, url: p.path },
+    openGraph: { type: "profile", title: p.displayName, description: p.headline ?? undefined, url: p.path, ...(p.photo ? { images: [{ url: p.photo.large, width: 800, height: 800, alt: `${p.displayName}, physiotherapist` }] } : {}) },
   };
 }
 
@@ -197,9 +197,14 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
         <div className="relative px-5 pb-6 md:px-8 md:pb-8">
           <div className="-mt-14 flex flex-col gap-5 md:-mt-20 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
-              <div aria-hidden className="profile-avatar flex h-28 w-28 shrink-0 items-center justify-center rounded-[28px] text-4xl font-semibold tracking-tight text-white ring-[6px] ring-surface md:h-36 md:w-36 md:text-5xl">
-                {initials.toUpperCase()}
-              </div>
+              {p.photo ? (
+                // eslint-disable-next-line @next/next/no-img-element -- ImageKit serves the sized, metadata-free variant
+                <img src={p.photo.url} srcSet={`${p.photo.url} 1x, ${p.photo.large} 2x`} alt={`${name}, physiotherapist`} width={144} height={144} fetchPriority="high" className="h-28 w-28 shrink-0 rounded-[28px] bg-surface object-cover ring-[6px] ring-surface md:h-36 md:w-36" />
+              ) : (
+                <div aria-hidden className="profile-avatar flex h-28 w-28 shrink-0 items-center justify-center rounded-[28px] text-4xl font-semibold tracking-tight text-white ring-[6px] ring-surface md:h-36 md:w-36 md:text-5xl">
+                  {initials.toUpperCase()}
+                </div>
+              )}
               <div className="min-w-0 sm:pt-[68px] md:pt-[92px]">
                 <h1 id="profile-name" className="text-3xl font-bold leading-tight tracking-tight text-navy md:text-4xl">{name}</h1>
                 <p className="mt-1 text-base text-muted md:text-lg">

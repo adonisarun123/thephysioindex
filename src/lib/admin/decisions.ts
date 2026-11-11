@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { hasRole, type Viewer } from "@/lib/auth/session";
 import { kickDispatch } from "@/lib/messaging/kick";
 import { publishOwnApprovedLocations } from "./locations";
+import { publishPendingPhoto } from "@/lib/workspace/photo";
 import { slugify, normaliseAlias } from "@/lib/slug";
 import { textArray } from "@/lib/sql";
 import {
@@ -165,6 +166,8 @@ async function decideProfile(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput
   switch (input.decision) {
     case "approved": {
       const pv = await publishVersion(tx, v, versionId, c.id, input.reason);
+      // The reviewer saw the pending photo in the case; approving the profile publishes it (PRO-10, PRO-12).
+      await publishPendingPhoto(tx, pv.practitioner_id, v.userId, c.id);
       if (isListing) {
         // The clinics shown in the case are part of what the reviewer approved: a first
         // publication with every association still pending would list nowhere (LOC-02).

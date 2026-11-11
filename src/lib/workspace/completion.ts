@@ -19,6 +19,12 @@ export type CompletionExtra = {
   offeringCount: number;
   availabilityRuleCount: number;
   consents: boolean;
+  /**
+   * Profile photograph (PRO-08 identity; owner request 11 Nov 2026). `undefined` when
+   * photo upload is not configured (no ImageKit keys): the item is then left out so
+   * nobody is blocked on something they cannot do.
+   */
+  photo?: boolean;
 };
 
 export type CompletionItem = { key: string; label: string; todo: string; done: boolean; href: string };
@@ -35,6 +41,7 @@ export function profileChecklist(content: ProfileDraft, extra: CompletionExtra):
     { key: "registration", label: "Registration number", todo: "Add your council registration or IAP number", done: extra.credentialCount > 0, href: FINISH },
     { key: "practice", label: "Where you practise", todo: "Add a clinic address or a home-visit area", done: extra.branchCount > 0, href: "/workspace/clinics" },
     { key: "consent", label: "Terms and publication consent", todo: "Accept provider terms and publication consent", done: extra.consents, href: FINISH },
+    ...(extra.photo === undefined ? [] : [{ key: "photo", label: "Profile photo", todo: "Add a clear photo of yourself", done: extra.photo, href: FINISH }]),
     { key: "about", label: "About you", todo: `Write your About section (at least ${ABOUT_MIN_CHARS} characters)`, done: (content.about?.trim().length ?? 0) >= ABOUT_MIN_CHARS, href: FINISH },
     { key: "specialty", label: "Main area of practice", todo: "Choose your main area of practice", done: Boolean(content.specialties?.some((s) => s.isPrimary)), href: FINISH },
     { key: "languages", label: "Languages", todo: "Add the languages you consult in", done: (content.languages?.length ?? 0) > 0, href: FINISH },

@@ -15,6 +15,7 @@ import { findUserByContact } from "@/lib/admin/practitioners";
 import { actorRole, archivePractitioner, lockPractitioner, reinstatePractitioner, setBookingEligible, suspendPractitioner } from "@/lib/admin/practitioner-ops";
 import { newPublicId } from "@/lib/public-id";
 import { normaliseRegistrationNumber, slugify } from "@/lib/slug";
+import { publishPendingPhoto, rejectPendingPhoto } from "@/lib/workspace/photo";
 
 const idReason = z.object({ practitionerId: zUuid, reason: zReason });
 
@@ -238,5 +239,24 @@ export async function submitForReviewAction(fd: FormData) {
     });
     revalidate(practitionerId);
     return { path: `/admin/cases/${caseId}`, notice: "Submitted for review" };
+  });
+}
+
+/** PRO-12: moderate a practitioner's pending profile photo outside a profile review. */
+export async function photoDecisionAction(fd: FormData) {
+  const v = await requireStaff("verification_reviewer");
+  const { practitionerId, decision, reason, back } = parseForm(
+    z.object({ practitionerId: zUuid, decision: z.enum(["approve", "reject"]), reason: zOpt(500), back: zOpt(200) }),
+    fd,
+  );
+  const to = back?.startsWith("/admin/") ? back : `/admin/practitioners/${practitionerId}`;
+  await act(to, async () => {
+    if (decision === "reject" && !reason) throw new ApiError("INVALID_INPUT", "Give a reason so the practitioner knows what to change");
+    const changed = await withTransaction((_c, tx) =>
+      decision === "approve" ? publishPendingPhoto(tx, practitionerId, v.userId) : rejectPendingPhoto(tx, practitionerId, v.userId, reason ?? ""),
+    );
+    revalidate(practitionerId);
+    revalidatePath(to);
+    return { notice: changed ? (decision === "approve" ? "Photo approved and live" : "Photo rejected") : "No pending photo" };
   });
 }
