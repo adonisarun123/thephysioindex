@@ -9,6 +9,7 @@ export function adminNav(c: QueueCounts): NavGroup[] {
       label: "Overview",
       items: [
         { href: "/admin", label: "Overview" },
+        { href: "/admin/approvals", label: "Approvals", count: c.approvals },
         { href: "/admin/bookings", label: "Bookings", count: c.bookings_today },
       ],
     },

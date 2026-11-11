@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:vercel": "npm run db:migrate && npm run db:seed && npm run db:seed:dev && npm run db:seed:content && npm run sql:lint && next build",
+    "build:vercel": "npm run db:migrate && npm run db:seed && npm run db:seed:dev && npm run db:seed:content && npm run content:publish && npm run sql:lint && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
@@ -16,6 +16,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed:dev": "tsx scripts/seed-dev.ts",
     "db:seed:content": "tsx scripts/seed-content.ts",
+    "content:publish": "tsx scripts/publish-posts.ts",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
     "sql:lint": "tsx scripts/sql-lint.ts"
   },
@@ -28,6 +29,7 @@
     "@vercel/functions": "^3.9.11",
     "better-auth": "^1.7.7",
     "drizzle-orm": "^0.45.4",
+    "js-yaml": "^4.3.2",
     "marked": "^18.1.1",
     "nanoid": "^6.0.2",
     "next": "^16.4.5",
@@ -39,6 +41,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "@types/react": "19.3.0",
