@@ -104,10 +104,11 @@ export async function rejectVersion(tx: Db, v: Viewer, versionId: string, caseId
 }
 
 /** REV-03: averages from published reviews only. */
+/** Headline rating and count come from booking reviews only; invited reviews are shown apart and never counted here. */
 export async function recalcReviews(tx: Db, practitionerId: string) {
   await tx.execute(sql`UPDATE practitioners p SET
       review_count = s.n, rating_avg_x100 = s.avg
-    FROM (SELECT count(*)::int AS n, CASE WHEN count(*) = 0 THEN NULL ELSE round(avg(rating) * 100)::int END AS avg FROM reviews WHERE practitioner_id = ${practitionerId} AND state = 'published') s
+    FROM (SELECT count(*)::int AS n, CASE WHEN count(*) = 0 THEN NULL ELSE round(avg(rating) * 100)::int END AS avg FROM reviews WHERE practitioner_id = ${practitionerId} AND state = 'published' AND source = 'booking') s
     WHERE p.id = ${practitionerId}`);
 }
 

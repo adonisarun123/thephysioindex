@@ -11,6 +11,7 @@ export async function queueCounts(): Promise<QueueCounts> {
     UNION ALL SELECT 'signups', count(*) FROM practitioner_signups WHERE status = 'new'
     UNION ALL SELECT 'support', count(*) FROM support_cases WHERE state IN ('open','in_progress')
     UNION ALL SELECT 'privacy', count(*) FROM privacy_requests WHERE state IN ('received','verified','in_progress')
+    UNION ALL SELECT 'photos', count(*) FROM treatment_photos WHERE state = 'pending' AND kind = 'practitioner' AND removed_at IS NULL
     UNION ALL SELECT 'content_blog', count(*) FROM content_articles WHERE kind = 'blog' AND status = 'in_review'
     UNION ALL SELECT 'content_condition', count(*) FROM content_articles WHERE kind = 'condition' AND status = 'in_review'
     UNION ALL SELECT 'content_news', count(*) FROM content_articles WHERE kind = 'news' AND status = 'in_review'

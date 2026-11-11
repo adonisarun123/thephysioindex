@@ -95,3 +95,23 @@ export function photoUrl(objectKey: string | null | undefined, size = 320): stri
   const path = objectKey.startsWith("/") ? objectKey : `/${objectKey}`;
   return `${endpoint}/tr:w-${size},h-${size},fo-face,q-80${path.split("/").map(encodeURIComponent).join("/")}`;
 }
+
+/** Folder for photographs of patients that a practitioner uploads to their own gallery. */
+export function patientPhotoFolder(publicId: string) {
+  const env = process.env.VERCEL_ENV === "production" ? "prod" : "test";
+  return `/${env}/practitioners/${publicId}/patients`;
+}
+
+/** Folder for photographs a patient attaches to the review written from one invitation. */
+export function reviewPhotoFolder(invitationId: string) {
+  const env = process.env.VERCEL_ENV === "production" ? "prod" : "test";
+  return `/${env}/reviews/${invitationId}`;
+}
+
+/** Public delivery URL scaled to fit a width, uncropped (gallery and review photos). */
+export function fitUrl(objectKey: string | null | undefined, width = 800): string | null {
+  const endpoint = imageKitEndpoint();
+  if (!objectKey || !endpoint) return null;
+  const path = objectKey.startsWith("/") ? objectKey : `/${objectKey}`;
+  return `${endpoint}/tr:w-${width},c-at_max,q-80${path.split("/").map(encodeURIComponent).join("/")}`;
+}

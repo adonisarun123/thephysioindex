@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { fitUrl } from "@/lib/media/imagekit";
 import { DL, JsonView, Pill, Section } from "@/components/admin/ui";
 import { fmtDate, fmtDateTime } from "@/lib/admin/format";
 import { diffContent, type StructuredContent } from "@/lib/admin/profile-content";
@@ -113,7 +114,7 @@ export function CaseSubject({ subjectType, subject }: { subjectType: string; sub
     case "review":
       return (
         <Section title="Review">
-          <DL items={[["Practitioner", <Link key="p" href={`/admin/practitioners/${s.practitionerId}`} className="underline">{s.practitionerName}</Link>], ["Booking", `${s.bookingReference} · ${s.bookingStatus} · ${fmtDateTime(s.appointmentAt)}`], ["Rating", `${s.rating} / 5`], ["Display name", s.displayName], ["State", <Pill key="s" status={s.state} />], ["Submitted", fmtDateTime(s.createdAt)]]} />
+          <DL items={[["Practitioner", <Link key="p" href={`/admin/practitioners/${s.practitionerId}`} className="underline">{s.practitionerName}</Link>], s.source === "invitation" ? ["Source", `Invited by the physiotherapist as “${s.invitedAs}” on ${fmtDateTime(s.invitedAt)} · written by ${s.authorEmail ?? "an account with no email"} · ${s.otherInvitedReviews} other invited review(s) for this profile`] : ["Booking", `${s.bookingReference} · ${s.bookingStatus} · ${fmtDateTime(s.appointmentAt)}`], ["Rating", `${s.rating} / 5`], ["Display name", s.displayName], ["State", <Pill key="s" status={s.state} />], ["Submitted", fmtDateTime(s.createdAt)]]} />
           <blockquote className="mt-3 whitespace-pre-wrap rounded-[var(--r-sm)] bg-surface-2 p-3 text-sm">{s.text ?? <em className="text-muted">No text</em>}</blockquote>
           {s.appeal ? (
             <div className="mt-3 rounded-[var(--r-sm)] border border-line p-3 text-sm">
@@ -122,6 +123,25 @@ export function CaseSubject({ subjectType, subject }: { subjectType: string; sub
               <p className="mt-2 whitespace-pre-wrap">{s.appeal}</p>
             </div>
           ) : null}
+          {Array.isArray(s.photos) && s.photos.length ? (
+            <div className="mt-3">
+              <p className="text-sm font-semibold">Photos attached by the patient ({s.photos.length})</p>
+              <p className="text-xs text-muted">Publishing the review publishes these photos; rejecting it rejects them. To take down a single photo later, use Patient photos → Live.</p>
+              <ul className="mt-2 flex flex-wrap gap-3">
+                {(s.photos as { id: string; key: string; state: string }[]).map((ph) => (
+                  <li key={ph.id}>
+                    {fitUrl(ph.key, 480) ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- ImageKit serves the sized variant
+                      <img src={fitUrl(ph.key, 480) ?? ""} alt="Photo attached to this review" className="h-40 w-auto rounded-[var(--r-sm)] border border-line" />
+                    ) : (
+                      <span className="text-xs text-muted">Image service not configured</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {s.source === "invitation" ? <p className="mt-2 text-xs text-muted">Invited review: shown publicly with an “Invited by the physiotherapist” label and not counted in the headline rating. Reject if it reads as written by the physiotherapist or someone who was not a patient.</p> : null}
           <p className="mt-2 text-xs text-muted">Negative feedback is not removed for being negative; reject only for abuse, spam or personal information (REV-03).</p>
         </Section>
       );
