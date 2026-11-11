@@ -50,7 +50,7 @@ type Post = z.infer<typeof Front> & { body: string; file: string };
 function load(): Post[] {
   let files: string[] = [];
   try {
-    files = readdirSync(DIR).filter((f) => f.endsWith(".md")).sort();
+    files = readdirSync(DIR).filter((f) => /^\d{4}-\d{2}-\d{2}-.+\.md$/.test(f)).sort();
   } catch {
     return [];
   }
