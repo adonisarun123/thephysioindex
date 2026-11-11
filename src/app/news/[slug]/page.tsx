@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DEFAULT_OG_IMAGE } from "@/lib/seo/jsonld";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: PageProps<"/news/[slug]">): P
     description: a.dek ?? renderMarkdown(a.bodyMarkdown).excerpt,
     alternates: { canonical: a.path, types: { "application/rss+xml": "/news/feed.xml" } },
     robots: robotsFor(d),
-    openGraph: { type: "article", title: a.title, description: a.dek ?? undefined, url: a.path, publishedTime: a.publishedAt, modifiedTime: a.updatedAt, section: a.newsCategory ?? undefined },
+    openGraph: { type: "article", images: [DEFAULT_OG_IMAGE], title: a.title, description: a.dek ?? undefined, url: a.path, publishedTime: a.publishedAt, modifiedTime: a.updatedAt, section: a.newsCategory ?? undefined },
   };
 }
 

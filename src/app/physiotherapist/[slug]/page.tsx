@@ -13,7 +13,9 @@ import { SectionNav } from "@/components/profile/section-nav";
 import { ShareButton } from "@/components/profile/share-button";
 import { VerificationBadge } from "@/components/verification-badge";
 import { getPublicProfile, resolvePractitionerSlug, type PublicProfile } from "@/lib/directory";
+import { listPublishedByPractitioner } from "@/lib/content/public";
 import { formatPaise } from "@/lib/money";
+import { DEFAULT_OG_IMAGE, faqPageJsonLd, ldJson } from "@/lib/seo/jsonld";
 import { listPublicPhotos } from "@/lib/treatment-photos";
 import { practitionerJsonLd } from "@/lib/profile-jsonld";
 import { VERIFICATION_LABELS } from "@/lib/verification";
@@ -40,7 +42,7 @@ export async function generateMetadata({ params }: PageProps<"/physiotherapist/[
       p.headline ??
       `${p.displayName} — ${p.specialties.map((s) => s.label).slice(0, 3).join(", ") || "physiotherapy"}${where}. Qualifications, registrations, fees and appointment booking.`,
     alternates: { canonical: p.path },
-    openGraph: { type: "profile", title: p.displayName, description: p.headline ?? undefined, url: p.path, ...(p.photo ? { images: [{ url: p.photo.large, width: 800, height: 800, alt: `${p.displayName}, physiotherapist` }] } : {}) },
+    openGraph: { type: "profile", title: p.displayName, description: p.headline ?? undefined, url: p.path, images: [p.photo ? { url: p.photo.large, width: 800, height: 800, alt: `${p.displayName}, physiotherapist` } : DEFAULT_OG_IMAGE] },
   };
 }
 
@@ -60,6 +62,8 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   const { profile: p, canonicalSlug } = data;
   if (slug !== canonicalSlug) permanentRedirect(`/physiotherapist/${canonicalSlug}`); // DIR-06, SEO-05
   if (p.listingStatus === "published") void track("profile_view", { practitionerId: p.id }); // ANA-02
+  // Guides this physiotherapist wrote and our team published; a failed lookup must not take the profile down.
+  const articles = p.listingStatus === "published" ? await listPublishedByPractitioner(p.id).catch(() => []) : [];
   // Approved gallery photos; a failed lookup must not take the profile down.
   const patientPhotos = p.listingStatus === "published" ? await listPublicPhotos(p.id).catch(() => []) : [];
 
@@ -144,7 +148,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   const invitedReviews = p.reviews.filter((r) => r.source === "invitation");
 
   // Answers are built only from published profile fields (DIR-14: no invented claims).
-  const faqs: { q: string; a: React.ReactNode }[] = [];
+  const faqs: { q: string; a: string }[] = [];
   if (p.branches.length) {
     faqs.push({
       q: `Where does ${firstName} practise?`,
@@ -187,6 +191,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
       ["reviews", "Reviews", true],
       ["photos", "Photos", patientPhotos.length > 0],
       ["achievements", "Achievements", p.portfolio.length > 0],
+      ["articles", "Articles", articles.length > 0],
       ["faq", "FAQs", true],
     ] as const
   )
@@ -196,6 +201,11 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   return (
     <div className="mx-auto max-w-[1280px] px-4 pb-36 pt-4 md:px-6 md:pt-6 lg:pb-16 xl:px-8">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(practitionerJsonLd(p, siteUrl)) }} />
+      {/* SEO-03: the FAQ answers below are rendered as the same plain text further down the page. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: ldJson(faqPageJsonLd(new URL(p.path, siteUrl).toString(), faqs.map((f) => ({ question: f.q, answer: f.a })))) }}
+      />
       <Breadcrumbs siteUrl={siteUrl} items={crumbs} />
 
       {/* First screen (PUB-07): identity, credentials label, location, fee basis. Precedes biography on every width. */}
@@ -577,6 +587,22 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                       </p>
                       {item.description ? <p className="mt-1 text-sm">{item.description}</p> : null}
                     </div>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : null}
+
+          {articles.length ? (
+            <Section id="articles" title={`Articles by ${firstName}`} icon={<DocIcon />} note="Written by this physiotherapist and read by our team before publication. General information, not personal medical advice.">
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {articles.map((a) => (
+                  <li key={a.id}>
+                    <Link href={a.path} className="profile-lift card block h-full p-4">
+                      <span className="block font-semibold text-navy">{a.title}</span>
+                      {a.dek ? <span className="mt-1 block text-sm text-muted">{a.dek}</span> : null}
+                      <span className="mt-2 block text-xs text-muted">{formatDate(a.publishedAt)}{a.readingMinutes ? ` · ${a.readingMinutes} min read` : ""}</span>
+                    </Link>
                   </li>
                 ))}
               </ul>

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { SearchForm } from "@/components/search-form";
 import { listStates } from "@/lib/geo";
+import { ldJson, organizationJsonLd, websiteJsonLd } from "@/lib/seo/jsonld";
 import { AudienceGrid, CareModes, ConditionGrid, ConditionGridSkeleton, PatientCta } from "@/components/home-sections";
 
 const METROS = [
@@ -17,11 +18,16 @@ const METROS = [
   ["Ahmedabad", "/physiotherapists/gujarat/ahmedabad"],
 ] as const;
 
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
+
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function Home() {
   return (
     <>
+      {/* SEO-03: who publishes the site and how to search it, for search engines and AI assistants. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(organizationJsonLd(siteUrl)) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(websiteJsonLd(siteUrl)) }} />
       {/* PUB-01: search is the dominant hero element; imagery is secondary (spec §7). */}
       <section className="mx-auto max-w-[1280px] px-4 pb-12 pt-8 md:px-6 md:pt-16">
         <div className="grid items-center gap-10 lg:grid-cols-[1.15fr_0.85fr]">
