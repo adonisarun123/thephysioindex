@@ -14,6 +14,7 @@ import { ShareButton } from "@/components/profile/share-button";
 import { VerificationBadge } from "@/components/verification-badge";
 import { getPublicProfile, resolvePractitionerSlug, type PublicProfile } from "@/lib/directory";
 import { formatPaise } from "@/lib/money";
+import { listPublicPhotos } from "@/lib/treatment-photos";
 import { practitionerJsonLd } from "@/lib/profile-jsonld";
 import { VERIFICATION_LABELS } from "@/lib/verification";
 
@@ -59,6 +60,8 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   const { profile: p, canonicalSlug } = data;
   if (slug !== canonicalSlug) permanentRedirect(`/physiotherapist/${canonicalSlug}`); // DIR-06, SEO-05
   if (p.listingStatus === "published") void track("profile_view", { practitionerId: p.id }); // ANA-02
+  // Approved gallery photos; a failed lookup must not take the profile down.
+  const patientPhotos = p.listingStatus === "published" ? await listPublicPhotos(p.id).catch(() => []) : [];
 
   if (p.listingStatus === "suspended") {
     return (
@@ -137,6 +140,9 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
         ["Nothing is booked until you agree", "An enquiry reserves nothing and costs nothing."],
       ];
 
+  const bookingReviews = p.reviews.filter((r) => r.source !== "invitation");
+  const invitedReviews = p.reviews.filter((r) => r.source === "invitation");
+
   // Answers are built only from published profile fields (DIR-14: no invented claims).
   const faqs: { q: string; a: React.ReactNode }[] = [];
   if (p.branches.length) {
@@ -179,6 +185,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
       ["experience", "Experience", p.experiences.length > 0],
       ["education", "Education", p.qualifications.length > 0],
       ["reviews", "Reviews", true],
+      ["photos", "Photos", patientPhotos.length > 0],
       ["achievements", "Achievements", p.portfolio.length > 0],
       ["faq", "FAQs", true],
     ] as const
@@ -501,42 +508,53 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
             </Section>
           ) : null}
 
-          <Section id="reviews" title="Appointment reviews" icon={<StarIcon />} note="Reviews come from completed platform appointments and are moderated. They do not verify clinical outcomes.">
+          <Section id="reviews" title="Reviews" icon={<StarIcon />} note="Every review is moderated. Reviews do not verify clinical outcomes.">
             {p.reviews.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-[var(--r-panel)] border border-dashed border-line-strong bg-surface-2 px-4 py-8 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-mark-soft text-mark">
                   <StarIcon className="h-6 w-6" />
                 </span>
-                <p className="font-medium">No appointment reviews yet</p>
-                <p className="max-w-sm text-sm text-muted">Only patients with a completed appointment can leave a review, so every review here is from a real visit.</p>
+                <p className="font-medium">No reviews yet</p>
+                <p className="max-w-sm text-sm text-muted">Reviews come from patients with a completed appointment booked here, or from patients {firstName} has invited. Each one is checked before it appears.</p>
               </div>
             ) : (
-              <ul className="grid gap-4">
-                {p.reviews.map((r, i) => (
-                  <li key={i} className="rounded-[var(--r-panel)] border border-line p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary-soft text-sm font-semibold text-secondary">{r.displayName.slice(0, 1).toUpperCase()}</span>
-                        <p className="font-medium">{r.displayName}</p>
-                      </div>
-                      <p className="flex items-center gap-1 text-sm text-muted">
-                        <span className="sr-only">{r.rating} out of 5</span>
-                        <span aria-hidden className="tracking-tight text-[#e0a100]">{"★".repeat(Math.round(r.rating))}<span className="text-line">{"★".repeat(5 - Math.round(r.rating))}</span></span>
-                        · {formatDate(r.publishedAt)}
-                      </p>
-                    </div>
-                    {r.text ? <p className="mt-3 text-sm leading-relaxed">{r.text}</p> : null}
-                    {r.reply ? (
-                      <div className="well mt-3 p-3 text-sm">
-                        <p className="font-medium">Reply from {name}</p>
-                        <p className="mt-1">{r.reply}</p>
-                      </div>
-                    ) : null}
+              <div className="grid gap-6">
+                {bookingReviews.length ? (
+                  <div>
+                    <h3 className="font-semibold text-navy">From appointments booked here ({bookingReviews.length})</h3>
+                    <p className="mt-1 text-sm text-muted">Written after a completed appointment made through The Physio Index. The star rating at the top of this page counts these only.</p>
+                    <ReviewList reviews={bookingReviews} practitionerName={name} />
+                  </div>
+                ) : null}
+                {invitedReviews.length ? (
+                  <div>
+                    <h3 className="font-semibold text-navy">From patients invited by {firstName} ({invitedReviews.length})</h3>
+                    <p className="mt-1 text-sm text-muted">{firstName} asked these patients for a review. Each confirmed an email address and declared they were treated by {firstName}; we could not check the appointment ourselves. Not counted in the star rating.</p>
+                    <ReviewList reviews={invitedReviews} practitionerName={name} invited />
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </Section>
+
+          {patientPhotos.length ? (
+            <Section id="photos" title="Patient photos" icon={<DocIcon />} note={`Shared by ${firstName}, who has declared that each patient gave written consent. Checked by our team before publication.`}>
+              <ul className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                {patientPhotos.map((ph) => (
+                  <li key={ph.id}>
+                    <a href={ph.url ?? "#"} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-[var(--r-panel)] border border-line">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- ImageKit serves the sized variant */}
+                      <img src={ph.thumbUrl ?? ""} alt={ph.caption ? `${ph.caption} — patient of ${name}` : `A patient of ${name}, physiotherapist, during a session`} loading="lazy" className="aspect-[4/3] w-full object-cover" />
+                    </a>
+                    {ph.caption ? <p className="mt-1 text-sm text-muted">{ph.caption}</p> : null}
                   </li>
                 ))}
               </ul>
-            )}
-          </Section>
+              <p className="mt-4 text-xs text-muted">
+                Are you in one of these photos and want it removed? <Link href="/help" className="underline">Tell us</Link> and we will take it down.
+              </p>
+            </Section>
+          ) : null}
 
           {p.portfolio.length ? (
             <Section id="achievements" title="Achievements and memberships" icon={<AwardIcon />}>
@@ -703,6 +721,51 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
         </div>
       </div>
     </div>
+  );
+}
+
+type PublicReview = PublicProfile["reviews"][number];
+
+/** One list of published reviews; invited ones carry a visible label and any photos the patient added. */
+function ReviewList({ reviews, practitionerName, invited }: { reviews: PublicReview[]; practitionerName: string; invited?: boolean }) {
+  return (
+    <ul className="mt-3 grid gap-4">
+      {reviews.map((r, i) => (
+        <li key={i} className="rounded-[var(--r-panel)] border border-line p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <span aria-hidden className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary-soft text-sm font-semibold text-secondary">{r.displayName.slice(0, 1).toUpperCase()}</span>
+              <p className="font-medium">{r.displayName}</p>
+              {invited ? <span className="pill bg-mark-soft text-ink-2">Invited by the physiotherapist</span> : null}
+            </div>
+            <p className="flex items-center gap-1 text-sm text-muted">
+              <span className="sr-only">{r.rating} out of 5</span>
+              <span aria-hidden className="tracking-tight text-[#e0a100]">{"★".repeat(Math.round(r.rating))}<span className="text-line">{"★".repeat(5 - Math.round(r.rating))}</span></span>
+              · {formatDate(r.publishedAt)}
+            </p>
+          </div>
+          {r.text ? <p className="mt-3 text-sm leading-relaxed">{r.text}</p> : null}
+          {r.photos.length ? (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {r.photos.map((ph) => (
+                <li key={ph.url}>
+                  <a href={ph.url} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- ImageKit serves the sized variant */}
+                    <img src={ph.thumbUrl} alt={`Photo added by ${r.displayName} to their review`} loading="lazy" className="h-24 w-24 rounded-[var(--r-sm)] border border-line object-cover" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {r.reply ? (
+            <div className="well mt-3 p-3 text-sm">
+              <p className="font-medium">Reply from {practitionerName}</p>
+              <p className="mt-1">{r.reply}</p>
+            </div>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   );
 }
 

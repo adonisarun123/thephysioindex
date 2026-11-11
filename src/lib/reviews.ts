@@ -206,13 +206,14 @@ export type PractitionerReview = {
   text: string | null;
   displayName: string;
   publishedAt: Date;
+  source: "booking" | "invitation";
   reply: { text: string; state: string; moderationReason: string | null; version: number } | null;
 };
 
 /** Published reviews of one practitioner with the latest reply version (any state), for the workspace. */
 export async function listPractitionerReviews(practitionerId: string): Promise<PractitionerReview[]> {
-  const res = await db().execute<{ id: string; rating: number; text: string | null; display_name: string; published_at: Date; reply_text: string | null; reply_state: string | null; reply_reason: string | null; reply_version: number | null }>(sql`
-    SELECT r.id, r.rating, r.text, r.display_name, r.published_at,
+  const res = await db().execute<{ id: string; rating: number; text: string | null; display_name: string; published_at: Date; source: string; reply_text: string | null; reply_state: string | null; reply_reason: string | null; reply_version: number | null }>(sql`
+    SELECT r.id, r.rating, r.text, r.display_name, r.published_at, r.source,
       rr.text AS reply_text, rr.state::text AS reply_state, rr.moderation_reason AS reply_reason, rr.version AS reply_version
     FROM reviews r
     LEFT JOIN LATERAL (SELECT * FROM review_replies x WHERE x.review_id = r.id ORDER BY x.version DESC LIMIT 1) rr ON true
@@ -225,6 +226,7 @@ export async function listPractitionerReviews(practitionerId: string): Promise<P
     text: r.text,
     displayName: r.display_name,
     publishedAt: new Date(r.published_at),
+    source: r.source === "invitation" ? "invitation" : "booking",
     reply: r.reply_text ? { text: r.reply_text, state: r.reply_state ?? "pending", moderationReason: r.reply_reason, version: Number(r.reply_version) } : null,
   }));
 }

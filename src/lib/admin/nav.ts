@@ -23,6 +23,7 @@ export function adminNav(c: QueueCounts): NavGroup[] {
         { href: "/admin/queues/duplicate_candidate", label: "Duplicates", count: c.duplicate_candidate },
         { href: "/admin/queues/offer_review", label: "Offers", count: c.offer_review },
         { href: "/admin/queues/review_moderation", label: "Reviews", count: c.review_moderation },
+        { href: "/admin/photos", label: "Patient photos", count: c.photos },
         { href: "/admin/queues/complaint", label: "Complaints", count: c.complaint },
         { href: "/admin/queues/correction_request", label: "Corrections", count: c.correction_request },
         { href: "/admin/queues/locality_proposal", label: "Locality proposals", count: c.locality_proposal },

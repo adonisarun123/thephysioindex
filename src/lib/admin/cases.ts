@@ -204,8 +204,12 @@ export async function loadSubject(subjectType: string, subjectId: string): Promi
       const res = await d.execute(sql`
         SELECT r.id, r.rating, r.text, r.display_name AS "displayName", r.state, r.moderation_reason AS "moderationReason", r.created_at AS "createdAt",
           (SELECT vc.evidence ->> 'appeal' FROM verification_cases vc WHERE vc.subject_type = 'review' AND vc.subject_id = r.id AND vc.evidence ? 'appeal' ORDER BY vc.submitted_at DESC LIMIT 1) AS appeal,
-          b.reference AS "bookingReference", b.status AS "bookingStatus", b.starts_at AS "appointmentAt", p.display_name AS "practitionerName", p.id AS "practitionerId"
-        FROM reviews r JOIN bookings b ON b.id = r.booking_id JOIN practitioners p ON p.id = r.practitioner_id WHERE r.id = ${subjectId}`);
+          r.source, b.reference AS "bookingReference", b.status AS "bookingStatus", b.starts_at AS "appointmentAt", p.display_name AS "practitionerName", p.id AS "practitionerId",
+          i.patient_label AS "invitedAs", i.created_at AS "invitedAt", au.email AS "authorEmail",
+          (SELECT count(*)::int FROM reviews o WHERE o.practitioner_id = r.practitioner_id AND o.source = 'invitation' AND o.id <> r.id) AS "otherInvitedReviews",
+          (SELECT coalesce(json_agg(json_build_object('id', t.id, 'key', t.object_key, 'state', t.state) ORDER BY t.created_at), '[]'::json) FROM treatment_photos t WHERE t.review_id = r.id AND t.removed_at IS NULL) AS photos
+        FROM reviews r LEFT JOIN bookings b ON b.id = r.booking_id LEFT JOIN review_invitations i ON i.id = r.invitation_id LEFT JOIN users au ON au.id = r.author_user_id
+          JOIN practitioners p ON p.id = r.practitioner_id WHERE r.id = ${subjectId}`);
       return (res.rows[0] as Record<string, unknown>) ?? null;
     }
     case "review_reply": {

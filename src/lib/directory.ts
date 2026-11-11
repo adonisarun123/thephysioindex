@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db/client";
-import { photoUrl } from "./media/imagekit";
+import { fitUrl, photoUrl } from "./media/imagekit";
 import { VERIFICATION_CATEGORY_SQL, type VerificationCategory } from "./verification";
 
 /**
@@ -373,7 +373,8 @@ export type PublicProfile = {
       cutoffHours: number | null;
     }[];
   }[];
-  reviews: { rating: number; text: string | null; displayName: string; publishedAt: string; reply: string | null }[];
+  /** `booking` reviews follow a completed platform appointment; `invitation` reviews were requested by the physiotherapist and are shown apart. */
+  reviews: { rating: number; text: string | null; displayName: string; publishedAt: string; reply: string | null; source: "booking" | "invitation"; photos: { url: string; thumbUrl: string }[] }[];
 };
 
 export async function getPublicProfile(publicId: string): Promise<PublicProfile | null> {
@@ -439,10 +440,11 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
         JOIN clinics c ON c.id = b.clinic_id AND c.status = 'published'
         JOIN localities l ON l.id = b.locality_id JOIN cities ci ON ci.id = b.city_id JOIN states st ON st.id = b.state_id
         WHERE pb.practitioner_id = p.id AND pb.state = 'approved' AND pb.active_to IS NULL) AS branches,
-      (SELECT coalesce(json_agg(json_build_object('rating', r.rating, 'text', r.text, 'displayName', r.display_name, 'publishedAt', r.published_at,
+      (SELECT coalesce(json_agg(json_build_object('rating', r.rating, 'text', r.text, 'displayName', r.display_name, 'publishedAt', r.published_at, 'source', r.source,
+          'photoKeys', (SELECT coalesce(json_agg(t.object_key ORDER BY t.created_at), '[]'::json) FROM treatment_photos t WHERE t.review_id = r.id AND t.state = 'approved' AND t.removed_at IS NULL),
           'reply', (SELECT rr.text FROM review_replies rr WHERE rr.review_id = r.id AND rr.state = 'approved' ORDER BY rr.version DESC LIMIT 1)
         ) ORDER BY r.published_at DESC), '[]'::json)
-        FROM (SELECT * FROM reviews r0 WHERE r0.practitioner_id = p.id AND r0.state = 'published' ORDER BY r0.published_at DESC LIMIT 20) r) AS reviews
+        FROM (SELECT * FROM reviews r0 WHERE r0.practitioner_id = p.id AND r0.state = 'published' ORDER BY r0.published_at DESC LIMIT 40) r) AS reviews
     FROM practitioners p
     WHERE p.public_id = ${publicId}
       AND p.listing_status IN ('published', 'suspended')
@@ -487,7 +489,10 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
         extraChargesPaise: Number(o.extraChargesPaise),
       })),
     })),
-    reviews: r.reviews as PublicProfile["reviews"],
+    reviews: (r.reviews as (Omit<PublicProfile["reviews"][number], "photos"> & { photoKeys: string[] })[]).map(({ photoKeys, ...rv }) => ({
+      ...rv,
+      photos: (photoKeys ?? []).map((k) => ({ url: fitUrl(k, 1200), thumbUrl: fitUrl(k, 320) })).filter((x): x is { url: string; thumbUrl: string } => Boolean(x.url && x.thumbUrl)),
+    })),
   };
 }
 

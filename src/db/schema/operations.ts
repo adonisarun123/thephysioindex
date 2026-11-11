@@ -146,9 +146,13 @@ export const reviews = pgTable(
   "reviews",
   {
     id: id(),
-    bookingId: uuid("booking_id").notNull().references(() => bookings.id),
-    patientId: uuid("patient_id").notNull().references(() => patients.id),
+    // Booking reviews carry booking + patient; invited reviews carry invitation + author (reviews_source_shape).
+    bookingId: uuid("booking_id").references(() => bookings.id),
+    patientId: uuid("patient_id").references(() => patients.id),
     practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    source: text("source").notNull().default("booking"), // booking | invitation
+    invitationId: uuid("invitation_id"),
+    authorUserId: uuid("author_user_id").references(() => users.id),
     rating: smallint("rating").notNull(),
     text: text("text"),
     displayName: text("display_name").notNull(),
@@ -160,6 +164,7 @@ export const reviews = pgTable(
   },
   (t) => [
     uniqueIndex("reviews_booking_uq").on(t.bookingId),
+    uniqueIndex("reviews_invitation_uq").on(t.invitationId),
     index("reviews_practitioner_state_idx").on(t.practitionerId, t.state),
     check("reviews_rating_range", sql`${t.rating} BETWEEN 1 AND 5`),
     check("reviews_text_len", sql`${t.text} IS NULL OR char_length(${t.text}) BETWEEN 20 AND 2000`),
@@ -180,6 +185,70 @@ export const reviewReplies = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex("review_replies_review_version_uq").on(t.reviewId, t.version), check("review_replies_len", sql`char_length(${t.text}) <= 1000`)],
+);
+
+/**
+ * A physiotherapist's invitation to a patient they treated outside the platform
+ * to write a review. The link token is an HMAC of id + token_version; nothing
+ * secret is stored. `patient_label` is the physiotherapist's private note of
+ * who it was sent to and is never shown publicly.
+ */
+export const reviewInvitations = pgTable(
+  "review_invitations",
+  {
+    id: id(),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+    patientLabel: text("patient_label").notNull(),
+    tokenVersion: integer("token_version").notNull().default(1),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index("review_invitations_practitioner_idx").on(t.practitionerId, t.createdAt)],
+);
+
+/**
+ * Photographs of patients shown on a public profile. Two sources:
+ *  - `practitioner`: uploaded by the physiotherapist, who declares they hold the
+ *    patient's written consent (owner decision 11 Nov 2026);
+ *  - `review`: attached by a patient to their own invited review.
+ * The exact consent wording agreed to is stored with each photo. Nothing is
+ * public until a moderator approves it; `removed_at` takes it down for good.
+ * Files live on ImageKit (object_key / external_id), as profile photos do.
+ */
+export const treatmentPhotos = pgTable(
+  "treatment_photos",
+  {
+    id: id(),
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    kind: text("kind").notNull(), // practitioner | review
+    reviewId: uuid("review_id").references(() => reviews.id),
+    uploadedByUserId: uuid("uploaded_by_user_id").notNull().references(() => users.id),
+    objectKey: text("object_key").notNull(),
+    externalId: text("external_id").notNull(),
+    mime: text("mime").notNull(),
+    bytes: integer("bytes").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    caption: text("caption"),
+    consentBasis: text("consent_basis").notNull(), // practitioner_declared | patient_own
+    consentStatement: text("consent_statement").notNull(),
+    consentAt: timestamp("consent_at", { withTimezone: true }).notNull().defaultNow(),
+    state: moderationState("state").notNull().default("pending"),
+    moderationReason: text("moderation_reason"),
+    moderatedByUserId: uuid("moderated_by_user_id").references(() => users.id),
+    moderatedAt: timestamp("moderated_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    removedReason: text("removed_reason"),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("treatment_photos_object_key_uq").on(t.objectKey),
+    index("treatment_photos_practitioner_idx").on(t.practitionerId, t.state),
+    index("treatment_photos_review_idx").on(t.reviewId),
+  ],
 );
 
 // ---------------- Media (DAT-04, SEC-04) ----------------
