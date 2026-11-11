@@ -14,6 +14,7 @@ import { ShareButton } from "@/components/profile/share-button";
 import { VerificationBadge } from "@/components/verification-badge";
 import { getPublicProfile, resolvePractitionerSlug, type PublicProfile } from "@/lib/directory";
 import { formatPaise } from "@/lib/money";
+import { DEFAULT_OG_IMAGE, faqPageJsonLd, ldJson } from "@/lib/seo/jsonld";
 import { practitionerJsonLd } from "@/lib/profile-jsonld";
 import { VERIFICATION_LABELS } from "@/lib/verification";
 
@@ -39,7 +40,7 @@ export async function generateMetadata({ params }: PageProps<"/physiotherapist/[
       p.headline ??
       `${p.displayName} — ${p.specialties.map((s) => s.label).slice(0, 3).join(", ") || "physiotherapy"}${where}. Qualifications, registrations, fees and appointment booking.`,
     alternates: { canonical: p.path },
-    openGraph: { type: "profile", title: p.displayName, description: p.headline ?? undefined, url: p.path, ...(p.photo ? { images: [{ url: p.photo.large, width: 800, height: 800, alt: `${p.displayName}, physiotherapist` }] } : {}) },
+    openGraph: { type: "profile", title: p.displayName, description: p.headline ?? undefined, url: p.path, images: [p.photo ? { url: p.photo.large, width: 800, height: 800, alt: `${p.displayName}, physiotherapist` } : DEFAULT_OG_IMAGE] },
   };
 }
 
@@ -138,7 +139,7 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
       ];
 
   // Answers are built only from published profile fields (DIR-14: no invented claims).
-  const faqs: { q: string; a: React.ReactNode }[] = [];
+  const faqs: { q: string; a: string }[] = [];
   if (p.branches.length) {
     faqs.push({
       q: `Where does ${firstName} practise?`,
@@ -189,6 +190,11 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   return (
     <div className="mx-auto max-w-[1280px] px-4 pb-36 pt-4 md:px-6 md:pt-6 lg:pb-16 xl:px-8">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(practitionerJsonLd(p, siteUrl)) }} />
+      {/* SEO-03: the FAQ answers below are rendered as the same plain text further down the page. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: ldJson(faqPageJsonLd(new URL(p.path, siteUrl).toString(), faqs.map((f) => ({ question: f.q, answer: f.a })))) }}
+      />
       <Breadcrumbs siteUrl={siteUrl} items={crumbs} />
 
       {/* First screen (PUB-07): identity, credentials label, location, fee basis. Precedes biography on every width. */}

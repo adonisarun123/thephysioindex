@@ -5,6 +5,13 @@ import { CONTENT_KINDS, HUB_INDEX_THRESHOLD, KIND_PATH, countPublished, listPubl
 
 const STATIC = ["/", "/physiotherapists", "/for-physiotherapists", "/help", "/policies/privacy", "/policies/terms", "/policies/cancellation", "/policies/provider-terms"];
 
+/**
+ * `db().execute()` returns timestamptz columns as strings (drizzle's node-postgres
+ * driver disables pg's date parsing), so `.toISOString()` on them throws and the
+ * sitemap answers 500. Accept either form (SEO-01).
+ */
+const day = (v: Date | string) => new Date(v).toISOString().slice(0, 10);
+
 export async function GET(_req: Request, ctx: RouteContext<"/sitemaps/[name]">) {
   await connection();
   const { name } = await ctx.params;
@@ -17,20 +24,20 @@ export async function GET(_req: Request, ctx: RouteContext<"/sitemaps/[name]">) 
   } else if (key === "locations") {
     urls = (await listIndexableLocationPaths()).map((p) => ({ loc: `${base}${p}`, changefreq: "daily", priority: 0.7 }));
   } else if (key === "clinics") {
-    urls = (await listPublishedClinicPaths()).map((r) => ({ loc: `${base}${r.path}`, lastmod: r.updated_at.toISOString().slice(0, 10), changefreq: "weekly", priority: 0.6 }));
+    urls = (await listPublishedClinicPaths()).map((r) => ({ loc: `${base}${r.path}`, lastmod: day(r.updated_at), changefreq: "weekly", priority: 0.6 }));
   } else if (key === "content") {
     // Published, non-noindex editorial pages plus hubs that have reached the index threshold (SEO-02).
     const [items, hubCounts] = await Promise.all([listPublishedContentPaths(), Promise.all(CONTENT_KINDS.map(async (k) => [k, await countPublished(k)] as const))]);
     urls = [
       ...hubCounts.filter(([, n]) => n >= HUB_INDEX_THRESHOLD).map(([k]) => ({ loc: `${base}${KIND_PATH[k]}`, changefreq: "daily", priority: 0.6 })),
-      ...items.map((r) => ({ loc: `${base}${r.path}`, lastmod: r.updatedAt.toISOString().slice(0, 10), changefreq: r.kind === "news" ? "monthly" : "weekly", priority: r.kind === "condition" ? 0.8 : 0.7 })),
+      ...items.map((r) => ({ loc: `${base}${r.path}`, lastmod: day(r.updatedAt), changefreq: r.kind === "news" ? "monthly" : "weekly", priority: r.kind === "condition" ? 0.8 : 0.7 })),
     ];
   } else {
     const m = /^practitioners-(\d+)$/.exec(key);
     if (m) {
       const page = Math.max(1, Number(m[1]));
       const rows = await listPublishedPractitionerPaths((page - 1) * SITEMAP_PRACTITIONER_CHUNK, SITEMAP_PRACTITIONER_CHUNK);
-      urls = rows.map((r) => ({ loc: `${base}${r.path}`, lastmod: r.updated_at.toISOString().slice(0, 10), changefreq: "weekly", priority: 0.8 }));
+      urls = rows.map((r) => ({ loc: `${base}${r.path}`, lastmod: day(r.updated_at), changefreq: "weekly", priority: 0.8 }));
     }
   }
   if (!urls) return new Response("Not found", { status: 404 });
