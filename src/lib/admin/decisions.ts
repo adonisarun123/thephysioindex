@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { setReviewPhotosState } from "@/lib/treatment-photos";
 import { withTransaction, type Db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
@@ -329,6 +330,8 @@ async function decideReview(tx: Db, v: Viewer, c: CaseRow, input: DecisionInput)
   else throw new ApiError("INVALID_INPUT", "Choose publish (approve) or reject");
   await tx.execute(sql`UPDATE reviews SET state = ${to}::review_state, moderation_reason = ${input.reason}, moderated_by_user_id = ${v.userId}, published_at = CASE WHEN ${to} = 'published' THEN coalesce(published_at, now()) ELSE published_at END WHERE id = ${r.id}`);
   await recalcReviews(tx, r.practitioner_id);
+  // Photos a patient attached to an invited review are approved or rejected with it.
+  await setReviewPhotosState(tx, r.id, to === "published" ? "approved" : "rejected", v.userId);
   await audit({ actorUserId: v.userId, actorRole: actorRole(v), action: `review.${to}`, objectType: "review", objectId: r.id, reason: input.reason, changedFields: { state: { from: r.state, to } }, correlationId: c.id }, tx);
   return to === "published" ? "Review published; averages recalculated" : "Review rejected; the submitter sees the reason";
 }
