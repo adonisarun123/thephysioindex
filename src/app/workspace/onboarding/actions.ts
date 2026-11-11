@@ -23,6 +23,7 @@ export async function finishProfileAction(formData: FormData) {
     const input = FinishSchema.parse({
       about: has("about") ? str(formData, "about") : undefined,
       primarySpecialtyId: has("primarySpecialtyId") ? str(formData, "primarySpecialtyId") : undefined,
+      otherSpecialtyIds: has("primarySpecialtyId") ? list(formData, "otherSpecialtyIds") : undefined,
       languageIds: has("languagesShown") ? list(formData, "languageIds") : undefined,
       service: has("serviceId") ? { serviceId, displayName: services.find((s) => s.id === serviceId)?.label ?? "Physiotherapy session", feePaise: fee } : undefined,
       hours: has("hoursShown") ? { weekdays: list(formData, "weekdays").map(Number), localStart: str(formData, "localStart"), localEnd: str(formData, "localEnd") } : undefined,
