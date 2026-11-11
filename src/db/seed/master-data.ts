@@ -373,6 +373,21 @@ const BASE_NOTIFICATION_TEMPLATES: NotificationTemplateSeed[] = [
     body: "The patient asked to cancel {{reference}} on {{localDateTime}} at {{branchName}}. The request came after your self-service cutoff, so it needs your decision.\n\nRespond in your workspace: {{workspaceUrl}}",
   },
   {
+    // Owner request 11 Nov 2026: sent once when a new listing is approved and published.
+    eventType: "practitioner.live",
+    channel: "email",
+    subject: "Your profile is live on The Physio Index",
+    body:
+      "Hi {{firstName}},\n\nGood news: your profile has been approved and is now live on The Physio Index.\n\nYour public profile: {{profileUrl}}\n\n{{bookingStatus}}\n\n{{pendingList}}\n\nShare your profile link on WhatsApp, Instagram or Google so patients can find you.\n\nYour workspace: {{workspaceUrl}}\n\nThe Physio Index team",
+  },
+  {
+    eventType: "profile.booking_enabled",
+    channel: "email",
+    subject: "Online booking is now on for your profile",
+    body:
+      "Hi {{firstName}},\n\nOnline booking is now switched on for your profile. Patients can pick a time and book you directly: {{profileUrl}}\n\nYou will get an email for every new booking. Keep your weekly hours and leave up to date so patients only see times you can keep.\n\nYour appointments: {{workspaceUrl}}\n\nThe Physio Index team",
+  },
+  {
     eventType: "verification.decided",
     channel: "sms",
     body: "The Physio Index: decision on {{subject}}: {{decision}}. Details: {{workspaceUrl}}",

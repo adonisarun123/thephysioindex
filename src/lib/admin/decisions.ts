@@ -86,7 +86,14 @@ async function notifyApplicant(tx: Db, c: CaseRow, input: DecisionInput) {
   const owner = c.practitioner_id ? (await tx.execute<{ owner_user_id: string | null }>(sql`SELECT owner_user_id FROM practitioners WHERE id = ${c.practitioner_id}`)).rows[0]?.owner_user_id : null;
   const recipientUserId = c.submitted_by_user_id ?? owner ?? null;
   if (!recipientUserId) return;
-  await emitOutbox(tx, "verification_case", c.id, "verification.decided", { caseId: c.id, caseType: c.case_type, decision: input.decision, reason: input.reason, subjectLabel, recipientUserId }, c.id);
+  // A first approval publishes the listing: the physio gets one "your profile is live" email
+  // (public link, booking status, what is still pending) instead of the generic decision notice.
+  if (c.case_type === "listing_review" && input.decision === "approved" && c.practitioner_id) {
+    await emitOutbox(tx, "practitioner", c.practitioner_id, "practitioner.live", { caseId: c.id, practitionerId: c.practitioner_id, recipientUserId }, c.id);
+    kickDispatch();
+    return;
+  }
+  await emitOutbox(tx, "verification_case", c.id, "verification.decided",{ caseId: c.id, caseType: c.case_type, decision: input.decision, reason: input.reason, subjectLabel, recipientUserId }, c.id);
   kickDispatch();
 }
 
