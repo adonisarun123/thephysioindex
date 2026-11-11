@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/admin/admin-shell";
-import { ActionsPanel, AssociationsPanel, CredentialsPanel, OfferingsPanel } from "@/components/admin/practitioner-panels";
+import { ActionsPanel, AssociationsPanel, CredentialsPanel, OfferingsPanel, PhotoPanel } from "@/components/admin/practitioner-panels";
 import { DL, Empty, Field, Hidden, JsonView, Notice, Pill, Section, Select, Table, Td, Textarea } from "@/components/admin/ui";
 import { listCases } from "@/lib/admin/cases";
 import { CASE_TYPE_LABELS, fmtDate, fmtDateTime, type SP } from "@/lib/admin/format";
@@ -12,6 +12,7 @@ import { auditFor, getPractitionerDetail, listAssociations, listCredentials, lis
 import { diffContent } from "@/lib/admin/profile-content";
 import { hasRole, requireStaff } from "@/lib/auth/session";
 import { db } from "@/db/client";
+import { photoState } from "@/lib/workspace/photo";
 import { VERIFICATION_LABELS } from "@/lib/verification";
 import { createCaseAction } from "../../actions/cases";
 import { submitForReviewAction } from "../../actions/practitioners";
@@ -31,7 +32,7 @@ async function Detail({ params, searchParams }: { params: PageProps<"/admin/prac
   const v = await requireStaff();
   const p = await getPractitionerDetail(id);
   if (!p) notFound();
-  const [credentials, associations, offerings, cases, slugs, audit, dups, checks] = await Promise.all([
+  const [credentials, associations, offerings, cases, slugs, audit, dups, checks, photo] = await Promise.all([
     listCredentials(id),
     listAssociations(id),
     listOfferings(id),
@@ -40,6 +41,7 @@ async function Detail({ params, searchParams }: { params: PageProps<"/admin/prac
     auditFor("practitioner", id),
     listDuplicateCandidates(id),
     bookingEligibilityChecklist(db(), id),
+    photoState(id),
   ]);
   const canReview = hasRole(v, "verification_reviewer");
   const diff = p.latestDraft ? diffContent(p.publishedContent, p.latestDraft.structuredContent) : [];
@@ -102,6 +104,7 @@ async function Detail({ params, searchParams }: { params: PageProps<"/admin/prac
             )}
           </Section>
 
+          <PhotoPanel practitionerId={id} photo={photo} canReview={canReview} />
           <CredentialsPanel p={p} credentials={credentials} canReview={canReview} />
           <AssociationsPanel p={p} associations={associations} canReview={canReview} />
           <OfferingsPanel offerings={offerings} />

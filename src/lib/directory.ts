@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db/client";
+import { photoUrl } from "./media/imagekit";
 import { VERIFICATION_CATEGORY_SQL, type VerificationCategory } from "./verification";
 
 /**
@@ -36,6 +37,8 @@ export type PractitionerCard = {
   slug: string;
   path: string;
   displayName: string;
+  /** Approved profile photo (ImageKit, 160 px square) or null. */
+  photoUrl: string | null;
   designation: string | null;
   headline: string | null;
   primaryQualification: string | null;
@@ -198,6 +201,8 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
         (p.booking_eligible AND NOT p.booking_paused) AS bookable,
         p.booking_paused,
         (p.claim_state = 'claimed') AS claimed,
+        -- Only an approved, current photo is public (PRO-10, PRO-12).
+        (SELECT m.object_key FROM media_assets m WHERE m.id = p.photo_asset_id AND m.moderation_state = 'approved' AND m.deleted_at IS NULL) AS photo_key,
         (SELECT q.degree FROM qualifications q WHERE q.practitioner_id = p.id ORDER BY q.sort_order, q.completion_year DESC NULLS LAST LIMIT 1) AS primary_qualification,
         (SELECT s.label FROM practitioner_specialties ps JOIN specialties s ON s.id = ps.specialty_id WHERE ps.practitioner_id = p.id ORDER BY ps.is_primary DESC, s.sort_order LIMIT 1) AS primary_specialty,
         ${verificationSql} AS verification,
@@ -241,6 +246,7 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
     primary_specialty: string | null;
     verification: VerificationCategory;
     other_branches: { localityName: string; cityName: string }[] | null;
+    photo_key: string | null;
     total: number | string;
   };
 
@@ -254,6 +260,7 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
     slug: r.slug,
     path: `/physiotherapist/${r.slug}-${r.public_id}`,
     displayName: r.display_name,
+    photoUrl: photoUrl(r.photo_key, 160),
     designation: r.designation,
     headline: r.headline,
     primaryQualification: r.primary_qualification,
@@ -297,6 +304,8 @@ export type PublicProfile = {
   path: string;
   listingStatus: string;
   displayName: string;
+  /** Approved profile photo at 2 sizes (PRO-12), or null. */
+  photo: { url: string; large: string } | null;
   designation: string | null;
   headline: string | null;
   gender: string;
@@ -372,6 +381,7 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
   const res = await db().execute<Record<string, unknown>>(sql`
     SELECT p.id, p.public_id, p.slug, p.listing_status, p.display_name, p.designation, p.headline, p.gender,
       (p.claim_state = 'claimed') AS claimed,
+      (SELECT m.object_key FROM media_assets m WHERE m.id = p.photo_asset_id AND m.moderation_state = 'approved' AND m.deleted_at IS NULL) AS photo_key,
       (p.booking_eligible AND NOT p.booking_paused) AS bookable,
       p.booking_paused, p.review_count, p.rating_avg_x100, p.published_at, p.practice_start_date,
       (SELECT pv.structured_content ->> 'about' FROM profile_versions pv WHERE pv.id = p.published_version_id) AS about,
@@ -449,6 +459,7 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
     path: `/physiotherapist/${r.slug}-${r.public_id}`,
     listingStatus: String(r.listing_status),
     displayName: String(r.display_name),
+    photo: r.photo_key ? { url: photoUrl(String(r.photo_key), 320) as string, large: photoUrl(String(r.photo_key), 800) as string } : null,
     designation: (r.designation as string | null) ?? null,
     headline: (r.headline as string | null) ?? null,
     gender: String(r.gender),

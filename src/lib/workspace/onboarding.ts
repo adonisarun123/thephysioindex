@@ -7,6 +7,8 @@ import { slugify } from "@/lib/slug";
 import { profileChecklist } from "./completion";
 import { getLatestVersion, type ProfileDraft } from "./draft";
 import { consentState, listAssociations, listCredentials } from "./queries";
+import { imageKitEnabled } from "@/lib/media/imagekit";
+import { hasPhoto, photoState } from "./photo";
 
 /** Profile creation and status support (PRO-02, PRO-03). */
 
@@ -63,15 +65,17 @@ export type OnboardingStatus = {
   offeringCount: number;
   availabilityRuleCount: number;
   consents: boolean;
+  photo?: boolean;
 };
 
 export async function onboardingStatus(practitionerId: string): Promise<OnboardingStatus> {
-  const [latest, creds, assoc, consents, rules] = await Promise.all([
+  const [latest, creds, assoc, consents, rules, photo] = await Promise.all([
     getLatestVersion(practitionerId),
     listCredentials(practitionerId),
     listAssociations(practitionerId),
     consentState(practitionerId),
     db().execute<{ n: string | number }>(sql`SELECT count(*) AS n FROM availability_rules r JOIN calendar_resources cr ON cr.id = r.resource_id WHERE cr.practitioner_id = ${practitionerId} AND (r.effective_to IS NULL OR r.effective_to >= current_date)`),
+    imageKitEnabled() ? photoState(practitionerId) : Promise.resolve(null),
   ]);
   const draft = latest?.content ?? {};
   const live = assoc.filter((a) => a.state !== "ended" && a.state !== "rejected");
@@ -86,6 +90,7 @@ export async function onboardingStatus(practitionerId: string): Promise<Onboardi
     offeringCount,
     availabilityRuleCount: Number(rules.rows[0]?.n ?? 0),
     consents: consentOk,
+    photo: photo ? hasPhoto(photo) : undefined,
   };
 }
 

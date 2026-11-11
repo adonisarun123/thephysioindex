@@ -16,9 +16,14 @@ function initials(name: string) {
 export function PractitionerCardRow({ card }: { card: Card }) {
   return (
     <li className="grid gap-3 border-b border-line py-5 sm:grid-cols-[3.5rem_1fr_auto] sm:gap-5">
-      <div aria-hidden className="hidden h-14 w-14 items-center justify-center rounded-md bg-brand-soft text-lg font-semibold text-brand-ink sm:flex">
-        {initials(card.displayName)}
-      </div>
+      {card.photoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- ImageKit serves the sized variant
+        <img src={card.photoUrl} alt="" loading="lazy" width={56} height={56} className="hidden h-14 w-14 rounded-md object-cover sm:block" />
+      ) : (
+        <div aria-hidden className="hidden h-14 w-14 items-center justify-center rounded-md bg-brand-soft text-lg font-semibold text-brand-ink sm:flex">
+          {initials(card.displayName)}
+        </div>
+      )}
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-lg font-semibold leading-tight">

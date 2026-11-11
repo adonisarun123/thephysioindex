@@ -4,6 +4,9 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { Notice, PageHeader, Section, StatePill } from "@/components/workspace/forms/ui";
 import { AboutSection, CredentialsSection, ExperienceSection, ExpertiseSection, IdentitySection, PortfolioSection, QualificationsSection } from "@/components/workspace/profile-sections";
+import { PhotoUploader } from "@/components/workspace/photo-uploader";
+import { imageKitEnabled } from "@/lib/media/imagekit";
+import { photoState } from "@/lib/workspace/photo";
 import { formatIst } from "@/lib/workspace/calendar";
 import { listAuthorityOptions, listLanguageOptions, listSpecialtyOptions } from "@/lib/workspace/catalog";
 import { latestCase } from "@/lib/workspace/cases";
@@ -28,7 +31,7 @@ async function Editor({ searchParams }: { searchParams: PageProps<"/workspace/pr
   await connection();
   const sp = await searchParams;
   const { practitioner: p } = await requireWorkspace("/workspace/profile");
-  const [version, credentials, authorities, specialties, languages, review, status] = await Promise.all([
+  const [version, credentials, authorities, specialties, languages, review, status, photo] = await Promise.all([
     getLatestVersion(p.id),
     listCredentials(p.id),
     listAuthorityOptions(),
@@ -36,6 +39,7 @@ async function Editor({ searchParams }: { searchParams: PageProps<"/workspace/pr
     listLanguageOptions(),
     latestCase(p.id, ["listing_review", "profile_change"]),
     onboardingStatus(p.id),
+    photoState(p.id),
   ]);
   const draft = version?.content ?? {};
   const gaps = validateForSubmission(draft, status);
@@ -64,6 +68,9 @@ async function Editor({ searchParams }: { searchParams: PageProps<"/workspace/pr
         <a href="#submit" className="underline">Go to submit</a>
       </div>
 
+      <div id="photo" className="mt-6">
+        <PhotoUploader displayName={draft.identity?.displayName ?? p.displayName} publishedUrl={photo.published?.url ?? null} pending={photo.pending} enabled={imageKitEnabled()} />
+      </div>
       <IdentitySection identity={draft.identity} />
       <AboutSection about={draft.about} />
       <QualificationsSection items={draft.qualifications ?? []} />

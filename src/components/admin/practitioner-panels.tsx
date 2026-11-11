@@ -7,7 +7,8 @@ import type { AssociationRow, CredentialRow, OfferingRow, PractitionerDetail } f
 import type { Viewer } from "@/lib/auth/session";
 import { hasRole } from "@/lib/auth/session";
 import { formatPaise } from "@/lib/money";
-import { archiveAction, associationAction, bookingEligibleAction, credentialStatusAction, pauseBookingsAction, reinstateAction, requestOwnershipTransferAction, suspendAction } from "@/app/admin/(app)/actions/practitioners";
+import type { PhotoState } from "@/lib/workspace/photo";
+import { archiveAction, associationAction, photoDecisionAction, bookingEligibleAction, credentialStatusAction, pauseBookingsAction, reinstateAction, requestOwnershipTransferAction, suspendAction } from "@/app/admin/(app)/actions/practitioners";
 
 /** Sections of the practitioner detail page. Forms post to server actions that re-check authorisation (IAM-01). */
 
@@ -180,5 +181,48 @@ export function ActionsPanel({ p, viewer, checks }: { p: PractitionerDetail; vie
         </Section>
       ) : null}
     </>
+  );
+}
+
+/** PRO-12: the photo a reviewer is approving. Approving the profile also publishes it. */
+export function PhotoPanel({ practitionerId, photo, canReview, back }: { practitionerId: string; photo: PhotoState; canReview: boolean; back?: string }) {
+  const pending = photo.pending;
+  return (
+    <Section id="photo" title="Profile photo">
+      <div className="flex flex-wrap gap-6 text-sm">
+        <figure>
+          {photo.published?.url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- ImageKit URL already sized
+            <img src={photo.published.url} alt="" className="h-28 w-28 rounded-md object-cover" />
+          ) : <div className="flex h-28 w-28 items-center justify-center rounded-md bg-brand-soft text-muted">None</div>}
+          <figcaption className="mt-1 text-muted">Live</figcaption>
+        </figure>
+        {pending ? (
+          <figure>
+            {/* eslint-disable-next-line @next/next/no-img-element -- ImageKit URL already sized */}
+            {pending.url ? <img src={pending.url} alt="" className="h-28 w-28 rounded-md object-cover ring-2 ring-mark" /> : null}
+            <figcaption className="mt-1"><Pill status={pending.state} /> {pending.state === "pending" ? "goes live on approval" : ""}</figcaption>
+          </figure>
+        ) : null}
+        {pending?.state === "pending" && canReview ? (
+          <div className="grid content-start gap-2">
+            <p className="max-w-xs text-muted">Check: the practitioner&apos;s own face, no patients, logos, text or certificates (PRO-12).</p>
+            <form action={photoDecisionAction}>
+              <Hidden name="practitionerId" value={practitionerId} />
+              <Hidden name="decision" value="approve" />
+              {back ? <Hidden name="back" value={back} /> : null}
+              <button className="btn btn-secondary py-1" type="submit">Approve photo now</button>
+            </form>
+            <form action={photoDecisionAction} className="grid gap-1">
+              <Hidden name="practitionerId" value={practitionerId} />
+              <Hidden name="decision" value="reject" />
+              {back ? <Hidden name="back" value={back} /> : null}
+              <Input name="reason" placeholder="Reason for rejecting" />
+              <button className="btn btn-quiet py-1" type="submit">Reject photo</button>
+            </form>
+          </div>
+        ) : null}
+      </div>
+    </Section>
   );
 }
