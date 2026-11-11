@@ -6,6 +6,7 @@ import type { QueueCounts } from "./nav";
 export async function queueCounts(): Promise<QueueCounts> {
   const res = await db().execute<{ key: string; n: number | string }>(sql`
     SELECT case_type::text AS key, count(*) AS n FROM verification_cases WHERE state IN ('open','in_review','awaiting_evidence') GROUP BY case_type
+    UNION ALL SELECT 'approvals', count(*) FROM verification_cases WHERE case_type IN ('listing_review','profile_change') AND state IN ('open','in_review')
     UNION ALL SELECT 'enquiries', count(*) FROM enquiries WHERE status = 'new'
     UNION ALL SELECT 'signups', count(*) FROM practitioner_signups WHERE status = 'new'
     UNION ALL SELECT 'support', count(*) FROM support_cases WHERE state IN ('open','in_progress')

@@ -10,7 +10,7 @@ import { config as loadEnv } from "dotenv";
 loadEnv({ path: [".env.local", ".env"] });
 import { eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 import * as schema from "../src/db/schema";
 import { newPublicId } from "../src/lib/public-id";
 import { normaliseRegistrationNumber, slugify } from "../src/lib/slug";
@@ -155,6 +155,13 @@ const PRACTITIONERS: Practitioner[] = [
 async function main() {
   const url = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("No database URL");
+  // Preview builds of different branches share the dev database. Serialise seeding with a
+  // session advisory lock so two concurrent builds cannot interleave deletes and inserts.
+  // The lock is released when this connection ends, including on a crash.
+  const lock = new Client({ connectionString: url, application_name: "thephysioindex-seed-dev-lock" });
+  await lock.connect();
+  console.log("[seed-dev] waiting for the seed lock");
+  await lock.query("SELECT pg_advisory_lock(hashtext('thephysioindex:seed-dev'))");
   const pool = new Pool({ connectionString: url, max: 2, application_name: "thephysioindex-seed-dev" });
   const db = drizzle(pool, { schema });
 
@@ -370,6 +377,7 @@ async function main() {
   }
   console.log(`[seed-dev] seeded ${CLINICS.length} test clinics, ${BRANCHES.length} branches, ${n} test practitioners`);
   await pool.end();
+  await lock.end();
 }
 
 main().catch((err) => {
