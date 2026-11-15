@@ -59,7 +59,7 @@ export function CaseSubject({ subjectType, subject }: { subjectType: string; sub
               ["Last checked", s.lastCheckedAt ? `${fmtDateTime(s.lastCheckedAt)} — ${s.scopeOfCheck ?? ""}` : "Never"],
               ["Next review", fmtDate(s.nextReviewAt)],
               ["Public number approved", s.publicNumberApproved ? "Yes" : "No"],
-              ["Evidence document", s.evidenceAssetId ? `Private asset ${String(s.evidenceAssetId).slice(0, 8)}… (served through a signed link; never public)` : "None uploaded"],
+              ["Evidence document", s.evidenceAssetId ? <a key="e" href={`/api/v1/credential-evidence?id=${String(s.id)}`} target="_blank" rel="noreferrer" className="underline">View certificate (private; every view is logged)</a> : "None uploaded"],
               ["Official lookup", s.lookupUrl ? <a key="u" href={s.lookupUrl} target="_blank" rel="noreferrer noopener" className="underline">{s.lookupUrl}</a> : "No public register recorded for this authority"],
             ]}
           />

@@ -1,10 +1,12 @@
 import type { AuthorityOption, Option } from "@/lib/workspace/catalog";
 import type { ProfileDraft } from "@/lib/workspace/draft";
+import { EVIDENCE_ACCEPT, evidenceEditableBy } from "@/lib/credential-evidence-rules";
 import type { CredentialRow } from "@/lib/workspace/queries";
 import { CredentialFields } from "@/components/workspace/forms/fields";
 import { Empty, Field, Section, StatePill } from "@/components/workspace/forms/ui";
 import {
   addCredentialAction,
+  uploadCredentialEvidenceAction,
   removeCredentialAction,
   saveAboutSection,
   saveExperiencesSection,
@@ -183,9 +185,9 @@ export function PortfolioSection({ items }: { items: NonNullable<ProfileDraft["p
   );
 }
 
-export function CredentialsSection({ credentials, authorities }: { credentials: CredentialRow[]; authorities: AuthorityOption[] }) {
+export function CredentialsSection({ credentials, authorities, evidenceEnabled }: { credentials: CredentialRow[]; authorities: AuthorityOption[]; evidenceEnabled: boolean }) {
   return (
-    <Section id="credentials" title="Registrations, enrolments and memberships" lede="Status is read-only here: a reviewer sets it after checking (VER-01, VER-02). Numbers are kept as text; the public number shows only once approved.">
+    <Section id="credentials" title="Registrations, enrolments and memberships" lede="Status is read-only here: a reviewer sets it after checking (VER-01, VER-02). Numbers are kept as text; the public number shows only once approved. Upload the certificate for each one to speed up verification: only you and our verification team can open it.">
       {credentials.length === 0 ? (
         <Empty>No credentials yet. At least one registration or enrolment is required for a bookable profile.</Empty>
       ) : (
@@ -195,6 +197,21 @@ export function CredentialsSection({ credentials, authorities }: { credentials: 
               <div>
                 <p className="font-medium">{c.authorityName}</p>
                 <p className="text-muted">{c.type.replace(/_/g, " ")} · No. {c.numberOriginal}{c.issueDate ? ` · issued ${c.issueDate}` : ""}{c.expiresOn ? ` · expires ${c.expiresOn}` : ""}{c.lastCheckedAt ? ` · checked ${c.lastCheckedAt.slice(0, 10)}` : ""}</p>
+                <p className="mt-1 text-xs">
+                  {c.hasEvidence ? (
+                    <a href={`/api/v1/credential-evidence?id=${c.id}`} target="_blank" rel="noreferrer" className="underline">View uploaded certificate</a>
+                  ) : (
+                    <span className="text-muted">No certificate uploaded</span>
+                  )}
+                </p>
+                {evidenceEnabled && evidenceEditableBy(c.status, false) ? (
+                  <form action={uploadCredentialEvidenceAction} className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <input type="hidden" name="credentialId" value={c.id} />
+                    <input name="file" type="file" accept={EVIDENCE_ACCEPT} aria-label={`Certificate for ${c.authorityName}`} className="text-xs" required />
+                    <button type="submit" className="underline">{c.hasEvidence ? "Replace certificate" : "Upload certificate"}</button>
+                    <span className="text-muted">PDF or photo, up to 4 MB</span>
+                  </form>
+                ) : null}
               </div>
               <div className="flex items-center gap-3">
                 <StatePill state={c.status} />

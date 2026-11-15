@@ -120,6 +120,7 @@ function ApprovalCardView({ c }: { c: ApprovalCard }) {
                     <p>
                       <span className="font-medium">{cr.authority}</span> {cr.number ? <code>{cr.number}</code> : <span className="text-muted">no number</span>} <Pill status={cr.status} />
                     </p>
+                    {cr.hasEvidence ? <p className="text-xs"><a href={`/api/v1/credential-evidence?id=${cr.id}`} target="_blank" rel="noreferrer" className="underline">View uploaded certificate</a></p> : null}
                     {cr.sameNumberElsewhere > 0 ? <p className="text-xs text-alert">Same number is on {cr.sameNumberElsewhere} other profile(s). Check for a duplicate.</p> : null}
                     {cr.status !== "registration_checked" && cr.number ? (
                       <label className="flex items-start gap-2">
