@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { listConditionCitySitemap } from "@/lib/condition-city";
 import { listIndexableLocationPaths, listPublishedClinicPaths, listPublishedPractitionerPaths } from "@/lib/directory";
 import { SITEMAP_PRACTITIONER_CHUNK, urlsetXml } from "@/lib/sitemap";
 import { CONTENT_KINDS, HUB_INDEX_THRESHOLD, KIND_PATH, countPublished, listPublishedContentPaths } from "@/lib/content/public";
@@ -25,6 +26,9 @@ export async function GET(_req: Request, ctx: RouteContext<"/sitemaps/[name]">) 
     urls = (await listIndexableLocationPaths()).map((p) => ({ loc: `${base}${p}`, changefreq: "daily", priority: 0.7 }));
   } else if (key === "clinics") {
     urls = (await listPublishedClinicPaths()).map((r) => ({ loc: `${base}${r.path}`, lastmod: day(r.updated_at), changefreq: "weekly", priority: 0.6 }));
+  } else if (key === "condition-cities") {
+    // Condition hubs and condition-by-city pages, highest search demand first (SEO-01). About 5,700 URLs; the limit per file is 50,000.
+    urls = (await listConditionCitySitemap()).map((r) => ({ loc: `${base}${r.path}`, changefreq: "weekly", priority: r.priority }));
   } else if (key === "content") {
     // Published, non-noindex editorial pages plus hubs that have reached the index threshold (SEO-02).
     const [items, hubCounts] = await Promise.all([listPublishedContentPaths(), Promise.all(CONTENT_KINDS.map(async (k) => [k, await countPublished(k)] as const))]);

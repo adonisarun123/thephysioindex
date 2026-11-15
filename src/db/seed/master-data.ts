@@ -184,6 +184,7 @@ export const CREDENTIAL_AUTHORITIES: {
 
 /** Proposed defaults from the SRS, stored as configuration (Specification status). */
 export const PLATFORM_CONFIG: { key: string; value: unknown; description: string; srsRef: string }[] = [
+  { key: "seo.condition_city.index_without_listings", value: true, description: "Index condition-by-city pages that list no physiotherapist yet (owner decision 15 Nov 2026). Set false to noindex them and drop them from the sitemap.", srsRef: "SEO-02" },
   { key: "otp.ttl_seconds", value: 300, description: "OTP validity window", srsRef: "IAM-07" },
   { key: "otp.max_attempts", value: 5, description: "Failed OTP attempts before lockout", srsRef: "IAM-07" },
   { key: "otp.resend_cooldown_seconds", value: 60, description: "Minimum gap between OTP resends", srsRef: "IAM-07" },

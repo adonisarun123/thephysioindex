@@ -20,6 +20,8 @@ export type SearchFilters = {
   citySlug?: string;
   localitySlug?: string;
   specialtySlug?: string;
+  /** Slug from the `conditions` vocabulary: only practitioners who list the condition. */
+  conditionSlug?: string;
   languageCode?: string;
   gender?: "female" | "male" | "non_binary";
   feeMinPaise?: number;
@@ -107,6 +109,9 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
   if (f.localitySlug) where.push(sql`l.slug = ${f.localitySlug}`);
   if (f.specialtySlug) {
     where.push(sql`EXISTS (select 1 from practitioner_specialties ps join specialties s on s.id = ps.specialty_id where ps.practitioner_id = p.id and s.slug = ${f.specialtySlug})`);
+  }
+  if (f.conditionSlug) {
+    where.push(sql`EXISTS (select 1 from practitioner_conditions pc join conditions cd on cd.id = pc.condition_id where pc.practitioner_id = p.id and cd.active and cd.slug = ${f.conditionSlug})`);
   }
   if (f.languageCode) {
     where.push(sql`EXISTS (select 1 from practitioner_languages pl join languages lg on lg.id = pl.language_id where pl.practitioner_id = p.id and lg.code = ${f.languageCode})`);

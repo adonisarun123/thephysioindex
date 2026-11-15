@@ -13,6 +13,7 @@ export async function GET() {
     { loc: `${base}/sitemaps/locations.xml` },
     { loc: `${base}/sitemaps/clinics.xml` },
     { loc: `${base}/sitemaps/content.xml` },
+    { loc: `${base}/sitemaps/condition-cities.xml` },
     ...Array.from({ length: chunks }, (_, i) => ({ loc: `${base}/sitemaps/practitioners-${i + 1}.xml` })),
   ];
   return new Response(sitemapIndexXml(urls), {

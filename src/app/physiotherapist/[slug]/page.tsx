@@ -336,7 +336,11 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                 <div className="mt-5">
                   <h3 className="text-sm font-semibold text-navy">Conditions treated</h3>
                   <ul className="mt-2 flex flex-wrap gap-2">
-                    {p.conditions.map((c) => <li key={c.slug} className="chip px-3 py-1.5 text-sm">{c.label}</li>)}
+                    {p.conditions.map((c) => (
+                      <li key={c.slug}>
+                        {primaryBranch ? <Link href={`/conditions/${c.slug}/${primaryBranch.citySlug}`} className="chip px-3 py-1.5 text-sm hover:border-brand">{c.label}</Link> : <span className="chip px-3 py-1.5 text-sm">{c.label}</span>}
+                      </li>
+                    ))}
                   </ul>
                   <p className="mt-2 text-xs text-muted">Listed by {firstName}. This is not a statement about results for any patient.</p>
                 </div>
