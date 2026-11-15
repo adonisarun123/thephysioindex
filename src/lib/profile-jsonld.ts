@@ -19,7 +19,7 @@ export function practitionerJsonLd(p: PublicProfile, siteUrl: string) {
     description: p.headline ?? undefined,
     hasOccupation: { "@type": "Occupation", name: "Physiotherapist" },
     knowsLanguage: p.languages.map((l) => l.code),
-    knowsAbout: p.specialties.map((s) => s.label),
+    knowsAbout: [...p.specialties.map((s) => s.label), ...p.conditions.map((c) => c.label)],
     alumniOf: p.qualifications.map((q) => ({ "@type": "EducationalOrganization", name: q.institution })),
     hasCredential: p.qualifications.map((q) => ({
       "@type": "EducationalOccupationalCredential",

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, withTransaction } from "@/db/client";
 import { audit } from "@/lib/audit";
+import { discardEvidence } from "@/lib/credential-evidence";
 import { ApiError } from "@/lib/api";
 import { normaliseRegistrationNumber } from "@/lib/slug";
 import { credentialTypeForAuthority } from "./catalog";
@@ -47,7 +48,9 @@ export async function addCredential(practitionerId: string, actorUserId: string,
 
 /** Only self-declared, unreviewed rows may be removed by the practitioner; reviewed history stays (VER-02). */
 export async function removeCredential(practitionerId: string, actorUserId: string, credentialId: string): Promise<void> {
-  const res = await db().execute(sql`DELETE FROM credentials WHERE id = ${credentialId} AND practitioner_id = ${practitionerId} AND status IN ('self_declared', 'pending')`);
-  if (res.rowCount === 0) throw new ApiError("CONFLICT", "Reviewed credentials cannot be removed here; ask support to correct them");
+  const res = await db().execute<{ evidence_asset_id: string | null }>(sql`DELETE FROM credentials WHERE id = ${credentialId} AND practitioner_id = ${practitionerId} AND status IN ('self_declared', 'pending') RETURNING evidence_asset_id`);
+  if (res.rows.length === 0) throw new ApiError("CONFLICT", "Reviewed credentials cannot be removed here; ask support to correct them");
+  // The uploaded certificate goes with the credential it supported.
+  if (res.rows[0].evidence_asset_id) await discardEvidence(res.rows[0].evidence_asset_id);
   await audit({ actorUserId, action: "credential.remove", objectType: "credential", objectId: credentialId });
 }

@@ -8,12 +8,13 @@ import { PhotoUploader } from "@/components/workspace/photo-uploader";
 import { imageKitEnabled } from "@/lib/media/imagekit";
 import { photoState } from "@/lib/workspace/photo";
 import { formatIst } from "@/lib/workspace/calendar";
-import { listAuthorityOptions, listLanguageOptions, listSpecialtyOptions } from "@/lib/workspace/catalog";
+import { listAuthorityOptions, listConditionOptions, listLanguageOptions, listSpecialtyOptions } from "@/lib/workspace/catalog";
 import { latestCase } from "@/lib/workspace/cases";
 import { requireWorkspace } from "@/lib/workspace/context";
 import { getLatestVersion, validateForSubmission } from "@/lib/workspace/draft";
 import { readMessage } from "@/lib/workspace/forms";
 import { onboardingStatus } from "@/lib/workspace/onboarding";
+import { evidenceEnabled } from "@/lib/credential-evidence";
 import { listCredentials } from "@/lib/workspace/queries";
 import { submitForReview } from "./actions";
 
@@ -31,7 +32,7 @@ async function Editor({ searchParams }: { searchParams: PageProps<"/workspace/pr
   await connection();
   const sp = await searchParams;
   const { practitioner: p } = await requireWorkspace("/workspace/profile");
-  const [version, credentials, authorities, specialties, languages, review, status, photo] = await Promise.all([
+  const [version, credentials, authorities, specialties, languages, review, status, photo, conditions] = await Promise.all([
     getLatestVersion(p.id),
     listCredentials(p.id),
     listAuthorityOptions(),
@@ -40,6 +41,7 @@ async function Editor({ searchParams }: { searchParams: PageProps<"/workspace/pr
     latestCase(p.id, ["listing_review", "profile_change"]),
     onboardingStatus(p.id),
     photoState(p.id),
+    listConditionOptions(),
   ]);
   const draft = version?.content ?? {};
   const gaps = validateForSubmission(draft, status);
@@ -75,9 +77,9 @@ async function Editor({ searchParams }: { searchParams: PageProps<"/workspace/pr
       <AboutSection about={draft.about} />
       <QualificationsSection items={draft.qualifications ?? []} />
       <ExperienceSection items={draft.experiences ?? []} />
-      <ExpertiseSection draft={draft} specialties={specialties} languages={languages} />
+      <ExpertiseSection draft={draft} specialties={specialties} languages={languages} conditions={conditions} />
       <PortfolioSection items={draft.portfolio ?? []} />
-      <CredentialsSection credentials={credentials} authorities={authorities} />
+      <CredentialsSection credentials={credentials} authorities={authorities} evidenceEnabled={evidenceEnabled()} />
 
       <Section id="submit" title={published ? "Submit changes for review" : "Submit for review"} lede={published ? "Identity, registration and degree changes trigger renewed review; the approved version remains visible meanwhile (VER-05)." : "Validates mandatory fields, requires current provider terms and opens a listing review (PRO-03)."}>
         {gaps.length ? (

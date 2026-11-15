@@ -12,14 +12,27 @@ import { conditionJsonLd, faqPageJsonLd } from "@/lib/content/jsonld";
 import { renderMarkdown } from "@/lib/content/markdown";
 import { getPublished, listRelated } from "@/lib/content/public";
 import { searchPractitioners, type PractitionerCard } from "@/lib/directory";
+import { getConditionBySlug, indexEmptyPages } from "@/lib/condition-city";
 import { indexDecision, robotsFor } from "@/lib/seo/gate";
+import { ConditionCityHub, ConditionCityLinks } from "./city-hub";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
 
 export async function generateMetadata({ params }: PageProps<"/conditions/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const a = await getPublished("condition", slug);
-  if (!a) return { title: "Condition not found", robots: { index: false, follow: false } };
+  if (!a) {
+    // No published guide: the page is a by-city directory hub for a condition in the vocabulary.
+    const c = await getConditionBySlug(slug).catch(() => null);
+    if (!c) return { title: "Condition not found", robots: { index: false, follow: false } };
+    const hub = await indexDecision(`/conditions/${c.slug}`, { hasContent: await indexEmptyPages() });
+    return {
+      title: `${c.label}: find a physiotherapist by city`,
+      description: `Physiotherapists who list ${c.label} among the conditions they treat, by city across India.`,
+      alternates: { canonical: `/conditions/${c.slug}` },
+      robots: robotsFor(hub),
+    };
+  }
   const d = await indexDecision(a.path, { hasContent: !a.noindex });
   return {
     title: `${a.title}: symptoms, causes and how physiotherapy helps`,
@@ -42,7 +55,11 @@ async function Condition({ params }: { params: PageProps<"/conditions/[slug]">["
   const { slug } = await params;
   await connection();
   const a = await getPublished("condition", slug);
-  if (!a) notFound();
+  const vocabulary = await getConditionBySlug(slug).catch(() => null);
+  if (!a) {
+    if (!vocabulary) notFound();
+    return <ConditionCityHub condition={vocabulary} siteUrl={siteUrl} />;
+  }
   const rendered = renderMarkdown(a.bodyMarkdown);
   const specialtySlug = a.specialty?.slug ?? null;
   const [related, practitioners] = await Promise.all([
@@ -94,6 +111,8 @@ async function Condition({ params }: { params: PageProps<"/conditions/[slug]">["
             ) : null}
             <Link href={findHref} className="btn btn-primary mt-5">{a.specialty ? `See all ${a.specialty.label.toLowerCase()} physiotherapists` : "Find a physiotherapist"}</Link>
           </section>
+
+          {vocabulary ? <ConditionCityLinks condition={vocabulary} heading={`${vocabulary.label} physiotherapists by city`} /> : null}
 
           <SourcesList sources={a.sources} />
           <p className="mt-8 text-xs text-muted">

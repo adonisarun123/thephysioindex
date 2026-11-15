@@ -44,7 +44,8 @@ function input(p: Awaited<ReturnType<typeof place>>, over: Record<string, unknow
     authorityId: p.authorityId,
     registrationNumber: `TEST-${Date.now()}`,
     practiceMode: "clinic_owner",
-    clinicName: "TEST Spine Clinic",
+    // Unique per call: a clinic with the same name at the same PIN code is joined, not created again (LOC-02).
+    clinicName: `TEST Spine Clinic ${Date.now()}-${Math.round(Math.random() * 1e6)}`,
     addressLine1: "12 Test Road",
     stateId: p.state_id,
     cityId: p.city_id,
@@ -61,6 +62,8 @@ describe("registration validation", () => {
     const base = { fullName: "A B", mobile: "9800000000", degree: "BPT", institution: "X Y", authorityId: "00000000-0000-4000-8000-000000000001", registrationNumber: "R1", practiceMode: "clinic_owner", stateId: "00000000-0000-4000-8000-000000000002", cityId: "00000000-0000-4000-8000-000000000003", localityId: "00000000-0000-4000-8000-000000000004", pinCode: "560034", consentTerms: true, consentContact: true };
     expect(RegistrationSchema.safeParse({ ...base, clinicName: "C", addressLine1: "Road" }).success).toBe(false); // clinic name too short
     expect(RegistrationSchema.safeParse({ ...base, clinicName: "Clinic", addressLine1: "12 Road" }).success).toBe(true);
+    // Joining a clinic picked from the suggestions needs no clinic name or address.
+    expect(RegistrationSchema.safeParse({ ...base, joinBranchId: "00000000-0000-4000-8000-000000000009" }).success).toBe(true);
     expect(RegistrationSchema.safeParse({ ...base, practiceMode: "home_visits" }).success).toBe(true);
     expect(RegistrationSchema.safeParse({ ...base, practiceMode: "home_visits", registrationNumber: "" }).success).toBe(false);
     expect(RegistrationSchema.safeParse({ ...base, practiceMode: "home_visits", consentTerms: false }).success).toBe(false);
@@ -109,6 +112,33 @@ describe.skipIf(!TEST_DB)("registration on PostgreSQL", () => {
     expect(profileChecklist(status.draft, status).some((i) => i.key === "hours")).toBe(false);
     const [b] = await q<{ kind: string }>(`SELECT b.kind FROM practitioner_branches pb JOIN branches b ON b.id = pb.branch_id WHERE pb.practitioner_id = $1`, [practitionerId]);
     expect(b.kind).toBe("service_area");
+  });
+
+  it("puts colleagues from one clinic on one clinic record (LOC-02)", async () => {
+    const p = await place();
+    const clinicName = `TEST Shared Clinic ${Date.now()}`;
+    const a = await registerPractitioner(await account("shared-a"), input(p, { clinicName }), {});
+    // Same clinic typed with different case and spacing at the same PIN code: joined, not duplicated.
+    const b = await registerPractitioner(await account("shared-b"), input(p, { clinicName: clinicName.toUpperCase().replace(/ /g, "  "), practiceMode: "independent", addressLine1: "Typed differently" }), {});
+    // Picked from "Is this where you work?": joins by branch id, whatever was typed.
+    const [first] = await q<{ branch_id: string }>(`SELECT branch_id FROM practitioner_branches WHERE practitioner_id = $1`, [a.practitionerId]);
+    const c = await registerPractitioner(await account("shared-c"), input(p, { clinicName: "Something else", addressLine1: undefined, practiceMode: "independent", joinBranchId: first.branch_id }), {});
+    // Same name at another PIN code is another clinic.
+    const d = await registerPractitioner(await account("shared-d"), input(p, { clinicName, pinCode: "560095" }), {});
+    const ids = [a.practitionerId, b.practitionerId, c.practitionerId, d.practitionerId];
+    await q(`UPDATE practitioners SET is_test_account = true WHERE id = ANY($1::uuid[])`, [ids]);
+
+    const rows = await q<{ practitioner_id: string; branch_id: string; state: string }>(`SELECT practitioner_id, branch_id, state::text AS state FROM practitioner_branches WHERE practitioner_id = ANY($1::uuid[])`, [ids]);
+    expect(rows).toHaveLength(4);
+    expect(rows.every((r) => r.state === "pending")).toBe(true);
+    const shared = rows.filter((r) => r.practitioner_id !== d.practitionerId).map((r) => r.branch_id);
+    expect(new Set(shared)).toEqual(new Set([first.branch_id]));
+    expect(rows.find((r) => r.practitioner_id === d.practitionerId)?.branch_id).not.toBe(first.branch_id);
+
+    // A clinic that no longer exists fails before anything is created.
+    const ghost = await account("shared-ghost");
+    expect(code(await registerPractitioner(ghost, input(p, { joinBranchId: "00000000-0000-4000-8000-00000000dead" }), {}).catch((e) => e))).toBe("INVALID_INPUT");
+    expect(await q(`SELECT 1 FROM practitioners WHERE owner_user_id = $1`, [ghost.userId])).toHaveLength(0);
   });
 
   it("creates nothing when the city is not in the chosen state", async () => {

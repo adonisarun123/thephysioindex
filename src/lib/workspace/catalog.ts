@@ -10,6 +10,14 @@ export async function listSpecialtyOptions(): Promise<Option[]> {
   return res.rows.map((r) => ({ id: r.id, label: r.label, hint: r.description }));
 }
 
+export type ConditionOption = { id: string; label: string; bodyArea: string };
+
+/** Conditions a practitioner can tick as "conditions I treat", in display order. */
+export async function listConditionOptions(): Promise<ConditionOption[]> {
+  const res = await db().execute<{ id: string; label: string; body_area: string }>(sql`SELECT id, label, body_area FROM conditions WHERE active ORDER BY sort_order, label`);
+  return res.rows.map((r) => ({ id: r.id, label: r.label, bodyArea: r.body_area }));
+}
+
 export async function listLanguageOptions(): Promise<Option[]> {
   const res = await db().execute<{ id: string; label: string; native_label: string | null }>(sql`SELECT id, label, native_label FROM languages WHERE active ORDER BY sort_order, label`);
   return res.rows.map((r) => ({ id: r.id, label: r.label, hint: r.native_label }));
@@ -88,6 +96,56 @@ export async function searchBranches(q: string, cityName?: string): Promise<Bran
     stateName: r.state_name,
     pinCode: r.pin_code,
   }));
+}
+
+export type ClinicSuggestion = { branchId: string; clinicName: string; branchName: string; address: string; localityName: string; pinCode: string; physios: number };
+
+/**
+ * Published clinics in one city whose name is close to what a registering
+ * physiotherapist typed, so colleagues land on one clinic page instead of
+ * each creating a copy (LOC-02). Unapproved clinics are never suggested:
+ * drafts stay on the server (DAT-02); `findSameClinicBranch` covers those.
+ */
+export async function suggestClinics(name: string, cityId: string): Promise<ClinicSuggestion[]> {
+  const term = name.trim();
+  if (term.length < 3) return [];
+  const res = await db().execute<Record<string, string>>(sql`
+    SELECT b.id AS branch_id, c.name AS clinic_name, b.name AS branch_name,
+      concat_ws(', ', b.address_line1, b.address_line2) AS address, l.name AS locality_name, b.pin_code,
+      (SELECT count(*) FROM practitioner_branches pb JOIN practitioners p ON p.id = pb.practitioner_id
+        WHERE pb.branch_id = b.id AND pb.state = 'approved' AND pb.active_to IS NULL AND p.listing_status = 'published') AS physios
+    FROM branches b JOIN clinics c ON c.id = b.clinic_id JOIN localities l ON l.id = b.locality_id
+    WHERE b.city_id = ${cityId} AND b.kind = 'clinic' AND b.status = 'published' AND c.status = 'published'
+      AND (similarity(lower(c.name), lower(${term})) >= 0.45
+        OR lower(c.name) LIKE lower(${`%${term}%`})
+        OR lower(${term}) LIKE '%' || lower(c.name) || '%')
+    ORDER BY similarity(lower(c.name), lower(${term})) DESC, c.name, b.name
+    LIMIT 3`);
+  return res.rows.map((r) => ({
+    branchId: r.branch_id,
+    clinicName: r.clinic_name,
+    branchName: r.branch_name,
+    address: r.address,
+    localityName: r.locality_name,
+    pinCode: r.pin_code,
+    physios: Number(r.physios),
+  }));
+}
+
+/**
+ * Safety net at registration: a clinic branch with the same name (ignoring
+ * case, spacing and punctuation) at the same PIN code in the same city is
+ * the same clinic, approved or not. Returns the oldest such branch.
+ */
+export async function findSameClinicBranch(name: string, cityId: string, pinCode: string): Promise<string | null> {
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (key.length < 3) return null;
+  const res = await db().execute<{ id: string }>(sql`
+    SELECT b.id FROM branches b JOIN clinics c ON c.id = b.clinic_id
+    WHERE b.city_id = ${cityId} AND b.pin_code = ${pinCode} AND b.kind = 'clinic' AND b.status <> 'archived' AND c.status <> 'archived'
+      AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') = ${key}
+    ORDER BY b.created_at LIMIT 1`);
+  return res.rows[0]?.id ?? null;
 }
 
 export type OfferingBounds = { durationMin: [number, number]; intervalMin: [number, number]; bufferMin: [number, number]; minNoticeMin: [number, number]; horizonDays: [number, number] };

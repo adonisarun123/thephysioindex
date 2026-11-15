@@ -5,7 +5,9 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DirectoryResults, filtersFromSearchParams, type RawSearchParams } from "@/components/directory-results";
+import { conditionCityPath, listConditions } from "@/lib/condition-city";
 import { getCityBySlug, getStateBySlug, listLocalities } from "@/lib/geo";
+import { byConditionDemand } from "@/lib/seo/condition-city-demand";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
 
@@ -37,6 +39,7 @@ async function CityPage({ params, searchParams }: { params: PageProps<"/physioth
   const city = await getCityBySlug(state.id, citySlug);
   if (!city) notFound();
   const localities = await listLocalities(city.id);
+  const conditions = byConditionDemand(await listConditions().catch(() => []));
   const total = city.publishedPractitionerCount;
   const basePath = `/physiotherapists/${state.slug}/${city.slug}`;
   const filters = filtersFromSearchParams(sp as RawSearchParams, { stateSlug: state.slug, citySlug: city.slug });
@@ -66,6 +69,18 @@ async function CityPage({ params, searchParams }: { params: PageProps<"/physioth
                   {l.name}
                   {l.publishedPractitionerCount > 0 ? <span className="text-muted"> ({l.publishedPractitionerCount})</span> : null}
                 </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {conditions.length > 0 ? (
+        <section className="mt-12">
+          <h2 className="text-lg font-semibold">Physiotherapists in {city.name} by condition</h2>
+          <ul className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+            {conditions.map((c) => (
+              <li key={c.slug}>
+                <Link href={conditionCityPath(c.slug, city.slug)} className="block rounded-md px-2 py-1.5 text-sm hover:bg-brand-soft">{c.label}</Link>
               </li>
             ))}
           </ul>

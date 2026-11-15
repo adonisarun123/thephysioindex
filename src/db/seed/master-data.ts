@@ -1,5 +1,51 @@
 /** Controlled taxonomies and platform defaults (PRO-08, VER-01, VER-03, Section 2, Section 30). */
 
+/**
+ * Conditions treated, in the words patients search with. Ticked by the practitioner,
+ * seen by the reviewer at approval, shown on the profile. Order within an area is display order.
+ */
+export const CONDITIONS: { slug: string; label: string; bodyArea: string }[] = [
+  { slug: "low-back-pain", label: "Low back pain", bodyArea: "Back and neck" },
+  { slug: "sciatica", label: "Sciatica", bodyArea: "Back and neck" },
+  { slug: "slipped-disc", label: "Slipped disc", bodyArea: "Back and neck" },
+  { slug: "neck-pain", label: "Neck pain", bodyArea: "Back and neck" },
+  { slug: "cervical-spondylosis", label: "Cervical spondylosis", bodyArea: "Back and neck" },
+  { slug: "lumbar-spondylosis", label: "Lumbar spondylosis", bodyArea: "Back and neck" },
+  { slug: "posture-related-pain", label: "Posture-related pain", bodyArea: "Back and neck" },
+  { slug: "scoliosis", label: "Scoliosis", bodyArea: "Back and neck" },
+  { slug: "frozen-shoulder", label: "Frozen shoulder", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "rotator-cuff-injury", label: "Rotator cuff injury", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "shoulder-pain", label: "Shoulder pain", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "tennis-elbow", label: "Tennis elbow", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "carpal-tunnel-syndrome", label: "Carpal tunnel syndrome", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "knee-pain", label: "Knee pain", bodyArea: "Hip, knee and foot" },
+  { slug: "knee-osteoarthritis", label: "Knee osteoarthritis", bodyArea: "Hip, knee and foot" },
+  { slug: "acl-and-ligament-injury", label: "ACL and ligament injury", bodyArea: "Hip, knee and foot" },
+  { slug: "meniscus-injury", label: "Meniscus injury", bodyArea: "Hip, knee and foot" },
+  { slug: "hip-pain", label: "Hip pain", bodyArea: "Hip, knee and foot" },
+  { slug: "ankle-sprain", label: "Ankle sprain", bodyArea: "Hip, knee and foot" },
+  { slug: "plantar-fasciitis", label: "Plantar fasciitis", bodyArea: "Hip, knee and foot" },
+  { slug: "heel-pain", label: "Heel pain", bodyArea: "Hip, knee and foot" },
+  { slug: "knee-replacement-rehabilitation", label: "Knee replacement rehabilitation", bodyArea: "After surgery or injury" },
+  { slug: "hip-replacement-rehabilitation", label: "Hip replacement rehabilitation", bodyArea: "After surgery or injury" },
+  { slug: "fracture-rehabilitation", label: "Fracture rehabilitation", bodyArea: "After surgery or injury" },
+  { slug: "sports-injury", label: "Sports injury", bodyArea: "After surgery or injury" },
+  { slug: "muscle-strain", label: "Muscle strain", bodyArea: "After surgery or injury" },
+  { slug: "stroke-rehabilitation", label: "Stroke rehabilitation", bodyArea: "Neurological" },
+  { slug: "parkinsons-disease", label: "Parkinson's disease", bodyArea: "Neurological" },
+  { slug: "bells-palsy", label: "Bell's palsy", bodyArea: "Neurological" },
+  { slug: "vertigo-and-bppv", label: "Vertigo and BPPV", bodyArea: "Neurological" },
+  { slug: "spinal-cord-injury", label: "Spinal cord injury", bodyArea: "Neurological" },
+  { slug: "cerebral-palsy", label: "Cerebral palsy", bodyArea: "Neurological" },
+  { slug: "developmental-delay-in-children", label: "Developmental delay in children", bodyArea: "Neurological" },
+  { slug: "arthritis", label: "Arthritis", bodyArea: "General" },
+  { slug: "balance-problems-and-falls", label: "Balance problems and falls", bodyArea: "General" },
+  { slug: "pregnancy-and-postnatal-back-pain", label: "Pregnancy and postnatal back pain", bodyArea: "General" },
+  { slug: "pelvic-floor-weakness", label: "Pelvic floor weakness", bodyArea: "General" },
+  { slug: "breathing-and-chest-physiotherapy", label: "Breathing and chest physiotherapy", bodyArea: "General" },
+  { slug: "headache-and-jaw-pain", label: "Headache and jaw pain", bodyArea: "General" },
+];
+
 export const SPECIALTIES: { code: string; label: string; requiresEvidence?: boolean; description?: string }[] = [
   { code: "ortho", label: "Orthopaedic physiotherapy", description: "Musculoskeletal conditions, joint and spine pain, post-fracture rehabilitation" },
   { code: "sports", label: "Sports physiotherapy", description: "Sports injury prevention, rehabilitation and return-to-play" },
@@ -54,6 +100,11 @@ export const SERVICES: { code: string; label: string; kind: "initial_assessment"
   { code: "electrotherapy_session", label: "Electrotherapy session", kind: "procedure" },
   { code: "exercise_program", label: "Exercise programme session", kind: "follow_up" },
   { code: "posture_ergonomic", label: "Posture and ergonomic consultation", kind: "initial_assessment" },
+  // Appended (owner request 11 Nov 2026): common services practitioners list. Append only, so existing sort order is unchanged.
+  { code: "home_visit_session", label: "Home visit session", kind: "follow_up", description: "Treatment session at the patient's home" },
+  { code: "balance_gait_session", label: "Balance and gait training session", kind: "follow_up" },
+  { code: "cupping_session", label: "Cupping therapy session", kind: "procedure" },
+  { code: "iastm_session", label: "IASTM session", kind: "procedure", description: "Instrument-assisted soft tissue mobilisation" },
 ];
 
 export const CREDENTIAL_AUTHORITIES: {
@@ -133,6 +184,7 @@ export const CREDENTIAL_AUTHORITIES: {
 
 /** Proposed defaults from the SRS, stored as configuration (Specification status). */
 export const PLATFORM_CONFIG: { key: string; value: unknown; description: string; srsRef: string }[] = [
+  { key: "seo.condition_city.index_without_listings", value: true, description: "Index condition-by-city pages that list no physiotherapist yet (owner decision 15 Nov 2026). Set false to noindex them and drop them from the sitemap.", srsRef: "SEO-02" },
   { key: "otp.ttl_seconds", value: 300, description: "OTP validity window", srsRef: "IAM-07" },
   { key: "otp.max_attempts", value: 5, description: "Failed OTP attempts before lockout", srsRef: "IAM-07" },
   { key: "otp.resend_cooldown_seconds", value: 60, description: "Minimum gap between OTP resends", srsRef: "IAM-07" },
@@ -371,6 +423,21 @@ const BASE_NOTIFICATION_TEMPLATES: NotificationTemplateSeed[] = [
     channel: "email",
     subject: "Action needed: cancellation request {{reference}}",
     body: "The patient asked to cancel {{reference}} on {{localDateTime}} at {{branchName}}. The request came after your self-service cutoff, so it needs your decision.\n\nRespond in your workspace: {{workspaceUrl}}",
+  },
+  {
+    // Owner request 11 Nov 2026: sent once when a new listing is approved and published.
+    eventType: "practitioner.live",
+    channel: "email",
+    subject: "Your profile is live on The Physio Index",
+    body:
+      "Hi {{firstName}},\n\nGood news: your profile has been approved and is now live on The Physio Index.\n\nYour public profile: {{profileUrl}}\n\n{{bookingStatus}}\n\n{{pendingList}}\n\nShare your profile link on WhatsApp, Instagram or Google so patients can find you.\n\nYour workspace: {{workspaceUrl}}\n\nThe Physio Index team",
+  },
+  {
+    eventType: "profile.booking_enabled",
+    channel: "email",
+    subject: "Online booking is now on for your profile",
+    body:
+      "Hi {{firstName}},\n\nOnline booking is now switched on for your profile. Patients can pick a time and book you directly: {{profileUrl}}\n\nYou will get an email for every new booking. Keep your weekly hours and leave up to date so patients only see times you can keep.\n\nYour appointments: {{workspaceUrl}}\n\nThe Physio Index team",
   },
   {
     eventType: "verification.decided",

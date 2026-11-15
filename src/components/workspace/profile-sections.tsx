@@ -1,10 +1,12 @@
-import type { AuthorityOption, Option } from "@/lib/workspace/catalog";
+import type { AuthorityOption, ConditionOption, Option } from "@/lib/workspace/catalog";
 import type { ProfileDraft } from "@/lib/workspace/draft";
+import { EVIDENCE_ACCEPT, evidenceEditableBy } from "@/lib/credential-evidence-rules";
 import type { CredentialRow } from "@/lib/workspace/queries";
 import { CredentialFields } from "@/components/workspace/forms/fields";
 import { Empty, Field, Section, StatePill } from "@/components/workspace/forms/ui";
 import {
   addCredentialAction,
+  uploadCredentialEvidenceAction,
   removeCredentialAction,
   saveAboutSection,
   saveExperiencesSection,
@@ -109,10 +111,12 @@ export function ExperienceSection({ items }: { items: NonNullable<ProfileDraft["
   );
 }
 
-export function ExpertiseSection({ draft, specialties, languages }: { draft: ProfileDraft; specialties: Option[]; languages: Option[] }) {
+export function ExpertiseSection({ draft, specialties, languages, conditions }: { draft: ProfileDraft; specialties: Option[]; languages: Option[]; conditions: ConditionOption[] }) {
   const chosen = new Set((draft.specialties ?? []).map((s) => s.specialtyId));
   const primary = draft.specialties?.find((s) => s.isPrimary)?.specialtyId ?? "";
   const langs = new Set(draft.languages ?? []);
+  const treats = new Set(draft.conditions ?? []);
+  const areas = [...new Set(conditions.map((c) => c.bodyArea))];
   return (
     <form action={saveExpertiseSection}>
       <Section id="expertise" title="Areas of practice and languages" lede="Controlled taxonomy; one primary area. Advanced areas may need supporting evidence at review (PRO-08).">
@@ -143,6 +147,27 @@ export function ExpertiseSection({ draft, specialties, languages }: { draft: Pro
             </ul>
           </div>
         </div>
+        {conditions.length ? (
+          <fieldset className="mt-6">
+            <legend className="label">Conditions you treat <span className="font-normal text-muted">(optional)</span></legend>
+            <p className="text-xs text-muted">Patients search by condition, for example &ldquo;frozen shoulder&rdquo;. Tick only what you treat regularly; our team sees this list when it reviews your profile.</p>
+            <div className="mt-2 grid gap-4 sm:grid-cols-2">
+              {areas.map((area) => (
+                <div key={area}>
+                  <p className="text-sm font-medium">{area}</p>
+                  <ul className="mt-1 grid gap-1 text-sm">
+                    {conditions.filter((c) => c.bodyArea === area).map((c) => (
+                      <li key={c.id} className="flex items-center gap-1.5">
+                        <input id={`cd-${c.id}`} type="checkbox" name="conditionIds" value={c.id} defaultChecked={treats.has(c.id)} />
+                        <label htmlFor={`cd-${c.id}`}>{c.label}</label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
         <Save />
       </Section>
     </form>
@@ -183,9 +208,9 @@ export function PortfolioSection({ items }: { items: NonNullable<ProfileDraft["p
   );
 }
 
-export function CredentialsSection({ credentials, authorities }: { credentials: CredentialRow[]; authorities: AuthorityOption[] }) {
+export function CredentialsSection({ credentials, authorities, evidenceEnabled }: { credentials: CredentialRow[]; authorities: AuthorityOption[]; evidenceEnabled: boolean }) {
   return (
-    <Section id="credentials" title="Registrations, enrolments and memberships" lede="Status is read-only here: a reviewer sets it after checking (VER-01, VER-02). Numbers are kept as text; the public number shows only once approved.">
+    <Section id="credentials" title="Registrations, enrolments and memberships" lede="Status is read-only here: a reviewer sets it after checking (VER-01, VER-02). Numbers are kept as text; the public number shows only once approved. Upload the certificate for each one to speed up verification: only you and our verification team can open it.">
       {credentials.length === 0 ? (
         <Empty>No credentials yet. At least one registration or enrolment is required for a bookable profile.</Empty>
       ) : (
@@ -195,6 +220,21 @@ export function CredentialsSection({ credentials, authorities }: { credentials: 
               <div>
                 <p className="font-medium">{c.authorityName}</p>
                 <p className="text-muted">{c.type.replace(/_/g, " ")} · No. {c.numberOriginal}{c.issueDate ? ` · issued ${c.issueDate}` : ""}{c.expiresOn ? ` · expires ${c.expiresOn}` : ""}{c.lastCheckedAt ? ` · checked ${c.lastCheckedAt.slice(0, 10)}` : ""}</p>
+                <p className="mt-1 text-xs">
+                  {c.hasEvidence ? (
+                    <a href={`/api/v1/credential-evidence?id=${c.id}`} target="_blank" rel="noreferrer" className="underline">View uploaded certificate</a>
+                  ) : (
+                    <span className="text-muted">No certificate uploaded</span>
+                  )}
+                </p>
+                {evidenceEnabled && evidenceEditableBy(c.status, false) ? (
+                  <form action={uploadCredentialEvidenceAction} className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <input type="hidden" name="credentialId" value={c.id} />
+                    <input name="file" type="file" accept={EVIDENCE_ACCEPT} aria-label={`Certificate for ${c.authorityName}`} className="text-xs" required />
+                    <button type="submit" className="underline">{c.hasEvidence ? "Replace certificate" : "Upload certificate"}</button>
+                    <span className="text-muted">PDF or photo, up to 4 MB</span>
+                  </form>
+                ) : null}
               </div>
               <div className="flex items-center gap-3">
                 <StatePill state={c.status} />

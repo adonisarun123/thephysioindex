@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Notice } from "@/components/workspace/forms/ui";
+import { formatLocal, nowMs } from "@/lib/booking/time";
 import { getPublicProfile, resolvePractitionerSlug } from "@/lib/directory";
 import { readMessage } from "@/lib/workspace/forms";
 import { submitEnquiry } from "./actions";
@@ -30,13 +31,22 @@ async function Enquire({ params, searchParams }: { params: PageProps<"/physiothe
   if (!p || p.listingStatus !== "published") notFound();
   const msg = readMessage(sp);
   const branch = p.branches[0];
+  // A time picked on the public calendar: shown back to the patient and sent with the enquiry. Re-checked by the action.
+  const offering = typeof sp.o === "string" ? p.branches.flatMap((b) => b.offerings).find((o) => o.id === sp.o) : undefined;
+  const startMs = typeof sp.t === "string" ? Date.parse(sp.t) : NaN;
+  const requested = offering && !Number.isNaN(startMs) && startMs > nowMs() ? { offering, startsAt: new Date(startMs).toISOString(), label: formatLocal(startMs) } : null;
 
   return (
     <div className="mx-auto max-w-xl px-4 py-10">
       <p className="text-sm text-muted"><Link href={p.path} className="underline">Back to {p.displayName}</Link></p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">Enquire about an appointment with {p.displayName}</h1>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight">{requested ? `Request this time with ${p.displayName}` : `Enquire about an appointment with ${p.displayName}`}</h1>
+      {requested ? (
+        <p className="card mt-4 border-brand bg-brand-soft p-4 text-sm">
+          <span className="font-medium">{requested.label} IST</span> · {requested.offering.displayName}, {requested.offering.durationMin} min
+        </p>
+      ) : null}
       <p className="mt-2 text-sm text-muted">
-        Online booking is not available for this profile{p.bookingPaused ? " at the moment" : ""}. We pass your enquiry to the clinic; <strong>this is not a booking</strong> and no time is reserved until the clinic confirms with you directly.
+        {requested ? "We send your request to the physiotherapist" : `Online booking is not available for this profile${p.bookingPaused ? " at the moment" : ""}. We pass your enquiry to the clinic`}; <strong>this is not a booking</strong> and no time is reserved until the clinic confirms with you directly.
         {branch?.publicPhone ? <> You can also call <a href={`tel:${branch.publicPhone}`} className="underline">{branch.publicPhone}</a>.</> : null}
       </p>
       {msg.ok === "sent" ? (
@@ -49,6 +59,12 @@ async function Enquire({ params, searchParams }: { params: PageProps<"/physiothe
           <Notice error={msg.error} />
           <form action={submitEnquiry} className="card mt-6 grid gap-4 p-5">
             <input type="hidden" name="slug" value={canonical} />
+            {requested ? (
+              <>
+                <input type="hidden" name="offeringId" value={requested.offering.id} />
+                <input type="hidden" name="requestedStart" value={requested.startsAt} />
+              </>
+            ) : null}
             <div>
               <label className="label" htmlFor="name">Your name</label>
               <input id="name" name="name" className="input" required minLength={2} maxLength={80} autoComplete="name" />
@@ -67,7 +83,7 @@ async function Enquire({ params, searchParams }: { params: PageProps<"/physiothe
               <input type="checkbox" name="consent" className="mt-1" required />
               <span>I agree that The Physio Index may share my name, number and message with this clinic for the purpose of this enquiry. <Link href="/policies/privacy" className="underline">Privacy notice</Link>.</span>
             </label>
-            <div><button type="submit" className="btn btn-primary">Send enquiry</button></div>
+            <div><button type="submit" className="btn btn-primary">{requested ? "Send request" : "Send enquiry"}</button></div>
           </form>
         </>
       )}

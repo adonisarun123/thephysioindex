@@ -7,6 +7,11 @@ import { email } from "./email";
 import { sms } from "./sms";
 import { whatsapp, whatsappLanguage } from "./whatsapp";
 import { firstName } from "@/lib/practice/enquiries";
+import { bookingEligibilityChecklist } from "@/lib/admin/practitioner-ops";
+import { onboardingStatus } from "@/lib/workspace/onboarding";
+import { completionPercent, profileChecklist } from "@/lib/workspace/completion";
+import { recommendedAdditions } from "@/lib/workspace/draft";
+import { firstNameOf, liveProfileVars, type EligibilityKey } from "./live-profile";
 
 /**
  * Notification delivery (Section 13, MSG-01, MSG-02).
@@ -23,7 +28,20 @@ import { firstName } from "@/lib/practice/enquiries";
 
 const CONSUMER = "notifications";
 const LEASE_MINUTES = 5;
-export const NOTIFIED_EVENTS = ["booking.confirmed", "booking.rescheduled", "booking.cancelled", "booking.cancellation_requested", "booking.completed", "verification.decided", "enquiry.created"];
+export const NOTIFIED_EVENTS = [
+  "booking.confirmed",
+  "booking.rescheduled",
+  "booking.cancelled",
+  "booking.cancellation_requested",
+  "booking.completed",
+  "verification.decided",
+  "enquiry.created",
+  "practitioner.live",
+  "profile.booking_enabled",
+];
+
+/** A booking switch-on within this window of going live is already covered by the live email. */
+const LIVE_EMAIL_COVERS_MINUTES = 30;
 
 type Channel = "sms" | "email" | "whatsapp";
 type Recipient = { type: "user" | "patient"; id: string };
@@ -90,6 +108,22 @@ async function planEvent(tx: Db, ev: OutboxRow, offsets: number[], inviteDelayMi
     const owner = (await tx.execute<{ owner_user_id: string | null }>(sql`
       SELECT p.owner_user_id FROM enquiries e JOIN practitioners p ON p.id = e.practitioner_id WHERE e.id = ${ev.aggregate_id}`)).rows[0]?.owner_user_id;
     if (owner) await queueFor(tx, ev, { type: "user", id: owner }, "enquiry.created.practitioner", { bookingId: null });
+    return;
+  }
+  if (ev.event_type === "practitioner.live") {
+    const userId = typeof ev.payload.recipientUserId === "string" ? ev.payload.recipientUserId : null;
+    if (userId) await queueFor(tx, ev, { type: "user", id: userId }, "practitioner.live", { bookingId: null });
+    return;
+  }
+  if (ev.event_type === "profile.booking_enabled") {
+    // One-screen approval switches booking on seconds after publishing; the live email already says so.
+    const covered = (await tx.execute<{ n: string | number }>(sql`
+      SELECT count(*) AS n FROM outbox_events
+      WHERE event_type = 'practitioner.live' AND aggregate_id = ${ev.aggregate_id}
+        AND occurred_at >= ${new Date(ev.occurred_at).toISOString()}::timestamptz - make_interval(mins => ${LIVE_EMAIL_COVERS_MINUTES})`)).rows[0];
+    if (Number(covered?.n ?? 0) > 0) return;
+    const owner = (await tx.execute<{ owner_user_id: string | null }>(sql`SELECT owner_user_id FROM practitioners WHERE id = ${ev.aggregate_id}`)).rows[0]?.owner_user_id;
+    if (owner) await queueFor(tx, ev, { type: "user", id: owner }, "profile.booking_enabled", { bookingId: null });
     return;
   }
   if (ev.event_type === "verification.decided") {
@@ -274,6 +308,8 @@ async function deliver(d: Leased): Promise<void> {
     const vars =
       d.template_event === "verification.decided" ? await verificationVars(d.event_id)
       : d.template_event === "enquiry.created.practitioner" ? await enquiryVars(d.event_id)
+      : d.template_event === "practitioner.live" ? await liveVars(d.event_id)
+      : d.template_event === "profile.booking_enabled" ? await bookingEnabledVars(d.event_id)
       : await bookingVars(d);
     if (vars === "stale") {
       await finish(d.id, "cancelled", "stale: booking changed, cancelled or already started");
@@ -405,6 +441,65 @@ async function verificationVars(eventId: string): Promise<Vars> {
     nextAction: NEXT_ACTION[decision] ?? "Sign in to your workspace for details.",
     subject: String(ev.payload.subjectLabel ?? "your listing"),
     workspaceUrl: `${appUrl()}/workspace`,
+  };
+}
+
+type LivePractitioner = {
+  id: string;
+  display_name: string;
+  path: string;
+  listing_status: string;
+  booking_eligible: boolean;
+  clinic_offerings: string | number;
+  other_offerings: string | number;
+};
+
+async function livePractitioner(eventId: string): Promise<LivePractitioner | null> {
+  return (
+    await db().execute<LivePractitioner>(sql`
+      SELECT p.id, p.display_name, p.slug || '-' || p.public_id AS path, p.listing_status::text AS listing_status, p.booking_eligible,
+        (SELECT count(*) FROM offerings o JOIN practitioner_branches pb ON pb.id = o.practitioner_branch_id JOIN branches b ON b.id = o.branch_id
+           WHERE o.practitioner_id = p.id AND o.active AND pb.state = 'approved' AND pb.active_to IS NULL AND b.status = 'published' AND o.mode = 'clinic') AS clinic_offerings,
+        (SELECT count(*) FROM offerings o JOIN practitioner_branches pb ON pb.id = o.practitioner_branch_id JOIN branches b ON b.id = o.branch_id
+           WHERE o.practitioner_id = p.id AND o.active AND pb.state = 'approved' AND pb.active_to IS NULL AND b.status = 'published' AND o.mode <> 'clinic') AS other_offerings
+      FROM outbox_events ev JOIN practitioners p ON p.id = ev.aggregate_id
+      WHERE ev.event_id = ${eventId}`)
+  ).rows[0] ?? null;
+}
+
+/** "Your profile is live": link, booking status and what is still pending, read at send time. */
+async function liveVars(eventId: string): Promise<Vars | "stale"> {
+  const p = await livePractitioner(eventId);
+  if (!p) throw new SendError("practitioner not found", true);
+  // Suspended or withdrawn before the email went out: do not announce a live profile.
+  if (p.listing_status !== "published") return "stale";
+  const [status, checks] = await Promise.all([onboardingStatus(p.id), bookingEligibilityChecklist(db(), p.id)]);
+  const items = profileChecklist(status.draft, status);
+  const base = appUrl();
+  return liveProfileVars({
+    displayName: p.display_name,
+    profileUrl: `${base}/physiotherapist/${p.path}`,
+    workspaceUrl: `${base}/workspace`,
+    bookingEligible: p.booking_eligible,
+    clinicOfferings: Number(p.clinic_offerings),
+    otherOfferings: Number(p.other_offerings),
+    openItems: items.filter((i) => !i.done).map((i) => i.todo),
+    percent: completionPercent(items),
+    failingChecks: checks.filter((c) => !c.ok).map((c) => c.key as EligibilityKey),
+    optional: recommendedAdditions(status.draft),
+  });
+}
+
+/** Online booking switched on later than the live email (e.g. once the registration check clears). */
+async function bookingEnabledVars(eventId: string): Promise<Vars | "stale"> {
+  const p = await livePractitioner(eventId);
+  if (!p) throw new SendError("practitioner not found", true);
+  if (!p.booking_eligible || p.listing_status !== "published") return "stale";
+  const base = appUrl();
+  return {
+    firstName: firstNameOf(p.display_name),
+    profileUrl: `${base}/physiotherapist/${p.path}`,
+    workspaceUrl: `${base}/workspace/appointments`,
   };
 }
 

@@ -23,9 +23,11 @@ export async function finishProfileAction(formData: FormData) {
     const input = FinishSchema.parse({
       about: has("about") ? str(formData, "about") : undefined,
       primarySpecialtyId: has("primarySpecialtyId") ? str(formData, "primarySpecialtyId") : undefined,
+      otherSpecialtyIds: has("primarySpecialtyId") ? list(formData, "otherSpecialtyIds") : undefined,
+      conditionIds: has("conditionsShown") ? list(formData, "conditionIds") : undefined,
       languageIds: has("languagesShown") ? list(formData, "languageIds") : undefined,
       service: has("serviceId") ? { serviceId, displayName: services.find((s) => s.id === serviceId)?.label ?? "Physiotherapy session", feePaise: fee } : undefined,
-      hours: has("hoursShown") ? { weekdays: list(formData, "weekdays").map(Number), localStart: str(formData, "localStart"), localEnd: str(formData, "localEnd") } : undefined,
+      hours: has("hoursShown") && !(has("hoursOptional") && list(formData, "weekdays").length === 0) ? { weekdays: list(formData, "weekdays").map(Number), localStart: str(formData, "localStart"), localEnd: str(formData, "localEnd") } : undefined,
       qualification: has("degree") ? { degree: str(formData, "degree"), institution: str(formData, "institution") } : undefined,
       credential: has("authorityId") ? { authorityId: str(formData, "authorityId"), number: str(formData, "registrationNumber") } : undefined,
       consent: has("consentShown") ? formData.get("consent") === "on" : undefined,

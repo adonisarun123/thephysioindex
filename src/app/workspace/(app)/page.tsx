@@ -57,6 +57,13 @@ async function Overview({ searchParams }: { searchParams: PageProps<"/workspace"
         </div>
       ) : null}
 
+      {status.availabilityRuleCount === 0 && status.offeringCount > 0 && status.branchCount > 0 ? (
+        <div className="card mt-6 border-mark bg-mark-soft p-4 text-sm">
+          <p className="font-medium">Patients cannot see when you are free</p>
+          <p className="mt-1">Add your weekly hours and your profile shows open times that patients can pick. You confirm each request. <Link href="/workspace/calendar#weekly" className="underline">Add weekly hours</Link></p>
+        </div>
+      ) : null}
+
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div>
           <Section title="Today’s appointments" lede={`${formatIst(new Date(), { weekday: "long", day: "numeric", month: "long" })} · Asia/Kolkata`}>

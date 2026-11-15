@@ -6,13 +6,14 @@ import type { EligibilityCheck } from "@/lib/admin/practitioner-ops";
 import type { AssociationRow, CredentialRow, OfferingRow, PractitionerDetail } from "@/lib/admin/practitioners";
 import type { Viewer } from "@/lib/auth/session";
 import { hasRole } from "@/lib/auth/session";
+import { EVIDENCE_ACCEPT } from "@/lib/credential-evidence-rules";
 import { formatPaise } from "@/lib/money";
 import type { PhotoState } from "@/lib/workspace/photo";
-import { archiveAction, associationAction, photoDecisionAction, bookingEligibleAction, credentialStatusAction, pauseBookingsAction, reinstateAction, requestOwnershipTransferAction, suspendAction } from "@/app/admin/(app)/actions/practitioners";
+import { archiveAction, associationAction, photoDecisionAction, bookingEligibleAction, credentialEvidenceAction, credentialStatusAction, pauseBookingsAction, reinstateAction, requestOwnershipTransferAction, suspendAction } from "@/app/admin/(app)/actions/practitioners";
 
 /** Sections of the practitioner detail page. Forms post to server actions that re-check authorisation (IAM-01). */
 
-export function CredentialsPanel({ p, credentials, canReview }: { p: PractitionerDetail; credentials: CredentialRow[]; canReview: boolean }) {
+export function CredentialsPanel({ p, credentials, canReview, evidenceOn }: { p: PractitionerDetail; credentials: CredentialRow[]; canReview: boolean; evidenceOn: boolean }) {
   return (
     <Section id="credentials" title="Credentials">
       <Table head={["Type", "Authority", "Number", "Status", "Checked", "Next review", "Public number", canReview ? "Record check" : ""]}>
@@ -21,7 +22,25 @@ export function CredentialsPanel({ p, credentials, canReview }: { p: Practitione
           <tr key={c.id}>
             <Td>{c.type.replace("_", " ")}</Td>
             <Td>{c.authority}<div className="text-xs text-muted">{c.authorityKind.replace("_", " ")}</div></Td>
-            <Td>{c.numberOriginal ?? "—"}{c.expiresOn ? <div className="text-xs text-muted">expires {fmtDate(c.expiresOn)}</div> : null}</Td>
+            <Td>
+              {c.numberOriginal ?? "—"}
+              {c.expiresOn ? <div className="text-xs text-muted">expires {fmtDate(c.expiresOn)}</div> : null}
+              <div className="text-xs">
+                {c.hasEvidence ? <a href={`/api/v1/credential-evidence?id=${c.id}`} target="_blank" rel="noreferrer" className="underline">View certificate</a> : <span className="text-muted">No certificate</span>}
+              </div>
+              {canReview && evidenceOn ? (
+                <details className="mt-1 text-xs">
+                  <summary className="cursor-pointer underline">{c.hasEvidence ? "Replace certificate" : "Upload certificate"}</summary>
+                  <form action={credentialEvidenceAction} className="mt-2 grid w-64 gap-2">
+                    <Hidden name="practitionerId" value={p.id} />
+                    <Hidden name="credentialId" value={c.id} />
+                    <input name="file" type="file" accept={EVIDENCE_ACCEPT} aria-label={`Certificate for ${c.authority}`} required />
+                    <span className="text-muted">PDF or photo, up to 4 MB. Private: staff and the physiotherapist only.</span>
+                    <button className="btn btn-secondary py-1" type="submit">Upload</button>
+                  </form>
+                </details>
+              ) : null}
+            </Td>
             <Td><Pill status={c.status} />{c.openCaseId ? <div className="text-xs"><Link href={`/admin/cases/${c.openCaseId}`} className="underline">open case</Link></div> : null}</Td>
             <Td className="text-xs">{c.lastCheckedAt ? <>{fmtDateTime(c.lastCheckedAt)}<div className="text-muted">{c.scopeOfCheck}</div></> : "never"}</Td>
             <Td className="text-xs">{fmtDate(c.nextReviewAt)}</Td>
