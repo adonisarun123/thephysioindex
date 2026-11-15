@@ -8,6 +8,7 @@ import { DL, Empty, Field, Hidden, JsonView, Notice, Pill, Section, Select, Tabl
 import { listCases } from "@/lib/admin/cases";
 import { CASE_TYPE_LABELS, fmtDate, fmtDateTime, type SP } from "@/lib/admin/format";
 import { bookingEligibilityChecklist } from "@/lib/admin/practitioner-ops";
+import { evidenceEnabled } from "@/lib/credential-evidence";
 import { auditFor, getPractitionerDetail, listAssociations, listCredentials, listDuplicateCandidates, listOfferings, listSlugHistory } from "@/lib/admin/practitioners";
 import { diffContent } from "@/lib/admin/profile-content";
 import { hasRole, requireStaff } from "@/lib/auth/session";
@@ -105,7 +106,7 @@ async function Detail({ params, searchParams }: { params: PageProps<"/admin/prac
           </Section>
 
           <PhotoPanel practitionerId={id} photo={photo} canReview={canReview} />
-          <CredentialsPanel p={p} credentials={credentials} canReview={canReview} />
+          <CredentialsPanel p={p} credentials={credentials} canReview={canReview} evidenceOn={evidenceEnabled()} />
           <AssociationsPanel p={p} associations={associations} canReview={canReview} />
           <OfferingsPanel offerings={offerings} />
 

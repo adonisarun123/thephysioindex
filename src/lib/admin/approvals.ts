@@ -31,7 +31,7 @@ export type ApprovalCard = {
   specialties: string[];
   conditions: string[];
   languages: string[];
-  credentials: { id: string; type: string; authority: string; number: string | null; status: string; lookupUrl: string | null; sameNumberElsewhere: number }[];
+  credentials: { id: string; type: string; authority: string; number: string | null; status: string; lookupUrl: string | null; sameNumberElsewhere: number; hasEvidence: boolean }[];
   places: { label: string; kind: string; state: string; services: { name: string; mode: string; minutes: number; pricePaise: number }[] }[];
   changedFields: string[];
 };
@@ -48,6 +48,7 @@ export async function listApprovals(): Promise<ApprovalCard[]> {
       (SELECT coalesce(json_agg(lg.label ORDER BY lg.label), '[]') FROM languages lg
          WHERE lg.id::text IN (SELECT jsonb_array_elements_text(coalesce(pv.structured_content -> 'languages', '[]'::jsonb)))) AS languages,
       (SELECT coalesce(json_agg(json_build_object('id', cr.id, 'type', cr.type, 'authority', a.name, 'number', cr.number_original, 'status', cr.status, 'lookupUrl', a.lookup_url,
+          'hasEvidence', EXISTS (SELECT 1 FROM media_assets m WHERE m.id = cr.evidence_asset_id AND m.deleted_at IS NULL),
           'sameNumberElsewhere', (SELECT count(*) FROM credentials o WHERE o.id <> cr.id AND o.authority_id = cr.authority_id AND o.type = cr.type AND o.number_normalised = cr.number_normalised AND cr.number_normalised IS NOT NULL))
           ORDER BY cr.created_at), '[]')
          FROM credentials cr JOIN credential_authorities a ON a.id = cr.authority_id WHERE cr.practitioner_id = p.id) AS credentials,

@@ -105,12 +105,13 @@ export async function getPractitionerDetail(id: string): Promise<PractitionerDet
   return res.rows[0] ?? null;
 }
 
-export type CredentialRow = { id: string; type: string; status: string; authorityId: string; authority: string; authorityKind: string; numberOriginal: string | null; issueDate: string | null; expiresOn: string | null; source: string | null; scopeOfCheck: string | null; lastCheckedAt: Date | null; nextReviewAt: Date | null; publicNumberApproved: boolean; openCaseId: string | null };
+export type CredentialRow = { id: string; type: string; status: string; authorityId: string; authority: string; authorityKind: string; numberOriginal: string | null; issueDate: string | null; expiresOn: string | null; source: string | null; scopeOfCheck: string | null; lastCheckedAt: Date | null; nextReviewAt: Date | null; publicNumberApproved: boolean; openCaseId: string | null; hasEvidence: boolean };
 
 export async function listCredentials(practitionerId: string): Promise<CredentialRow[]> {
   const res = await db().execute<CredentialRow>(sql`
     SELECT c.id, c.type, c.status, c.authority_id AS "authorityId", a.name AS authority, a.kind AS "authorityKind", c.number_original AS "numberOriginal", c.issue_date::text AS "issueDate", c.expires_on::text AS "expiresOn", c.source, c.scope_of_check AS "scopeOfCheck",
       c.last_checked_at AS "lastCheckedAt", c.next_review_at AS "nextReviewAt", c.public_number_approved AS "publicNumberApproved",
+      EXISTS (SELECT 1 FROM media_assets m WHERE m.id = c.evidence_asset_id AND m.deleted_at IS NULL) AS "hasEvidence",
       (SELECT vc.id FROM verification_cases vc WHERE vc.subject_type = 'credential' AND vc.subject_id = c.id AND vc.state IN ('open','in_review','awaiting_evidence') LIMIT 1) AS "openCaseId"
     FROM credentials c JOIN credential_authorities a ON a.id = c.authority_id WHERE c.practitioner_id = ${practitionerId} ORDER BY c.created_at`);
   return res.rows;

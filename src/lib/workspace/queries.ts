@@ -86,11 +86,12 @@ export async function listAssociations(practitionerId: string): Promise<Associat
   }));
 }
 
-export type CredentialRow = { id: string; type: string; authorityName: string; authorityKind: string; numberOriginal: string | null; issueDate: string | null; expiresOn: string | null; status: string; lastCheckedAt: string | null };
+export type CredentialRow = { id: string; type: string; authorityName: string; authorityKind: string; numberOriginal: string | null; issueDate: string | null; expiresOn: string | null; status: string; lastCheckedAt: string | null; hasEvidence: boolean };
 
 export async function listCredentials(practitionerId: string): Promise<CredentialRow[]> {
   const res = await db().execute<Record<string, unknown>>(sql`
-    SELECT c.id, c.type::text AS type, a.name AS authority_name, a.kind::text AS authority_kind, c.number_original, c.issue_date, c.expires_on, c.status::text AS status, c.last_checked_at
+    SELECT c.id, c.type::text AS type, a.name AS authority_name, a.kind::text AS authority_kind, c.number_original, c.issue_date, c.expires_on, c.status::text AS status, c.last_checked_at,
+      EXISTS (SELECT 1 FROM media_assets m WHERE m.id = c.evidence_asset_id AND m.deleted_at IS NULL) AS has_evidence
     FROM credentials c JOIN credential_authorities a ON a.id = c.authority_id
     WHERE c.practitioner_id = ${practitionerId} ORDER BY c.type, c.created_at`);
   return res.rows.map((r) => ({
@@ -103,6 +104,7 @@ export async function listCredentials(practitionerId: string): Promise<Credentia
     expiresOn: r.expires_on ? String(r.expires_on) : null,
     status: r.status as string,
     lastCheckedAt: r.last_checked_at ? String(r.last_checked_at) : null,
+    hasEvidence: Boolean(r.has_evidence),
   }));
 }
 

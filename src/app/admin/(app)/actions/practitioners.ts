@@ -7,6 +7,8 @@ import { withTransaction } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { requireStaff } from "@/lib/auth/session";
+import { attachEvidence } from "@/lib/credential-evidence";
+import { MAX_EVIDENCE_BYTES } from "@/lib/credential-evidence-rules";
 import { openCase } from "@/lib/admin/cases";
 import { publishOwnApprovedLocations } from "@/lib/admin/locations";
 import { decideCase } from "@/lib/admin/decisions";
@@ -125,6 +127,21 @@ export async function credentialStatusAction(fd: FormData) {
     const msg = await decideCase(v, { caseId: id, decision, reason: input.reason, credentialStatus: input.status, method: input.method, scopeOfCheck: input.scopeOfCheck, nextReviewAt: input.nextReviewAt ? `${input.nextReviewAt}T00:00:00+05:30` : undefined, publicNumberApproved: input.publicNumberApproved });
     revalidate(input.practitionerId);
     return { notice: msg };
+  });
+}
+
+/** VER-02: staff attach a certificate the physiotherapist sent by email or WhatsApp. Status is unchanged; record the check separately. */
+export async function credentialEvidenceAction(fd: FormData) {
+  const v = await requireStaff("verification_reviewer");
+  const practitionerId = zUuid.parse(fd.get("practitionerId"));
+  const credentialId = zUuid.parse(fd.get("credentialId"));
+  await act(`/admin/practitioners/${practitionerId}#credentials`, async () => {
+    const file = fd.get("file");
+    if (!(file instanceof File) || file.size === 0) throw new ApiError("INVALID_INPUT", "Choose a file to upload");
+    if (file.size > MAX_EVIDENCE_BYTES) throw new ApiError("INVALID_INPUT", "Files can be up to 4 MB. Take a smaller photo or compress the PDF.");
+    await attachEvidence({ practitionerId, credentialId, actorUserId: v.userId, actorRole: actorRole(v), byStaff: true, bytes: Buffer.from(await file.arrayBuffer()) });
+    revalidate(practitionerId);
+    return { notice: "Certificate attached. It is private to staff and the physiotherapist." };
   });
 }
 
