@@ -16,8 +16,11 @@ export type StructuredContent = {
   practiceStartDate?: string; // YYYY-MM-DD
   qualifications?: { degree: string; institution: string; completionYear?: number | null; inProgress?: boolean }[];
   experiences?: { role: string; organisationName: string; startMonth: string; endMonth?: string | null; description?: string | null }[];
-  /** Specialty codes or ids; first entry (or isPrimary) is primary. */
-  specialties?: (string | { code?: string; id?: string; isPrimary?: boolean })[];
+  /**
+   * Specialty codes or ids; first entry (or isPrimary) is primary. The
+   * workspace draft stores `{ specialtyId, isPrimary }` (src/lib/workspace/draft.ts).
+   */
+  specialties?: (string | { code?: string; id?: string; specialtyId?: string; isPrimary?: boolean })[];
   /** Language codes or ids. */
   languages?: (string | { code?: string; id?: string })[];
   portfolio?: { kind: "award" | "certification" | "membership" | "publication" | "website" | "social"; title: string; issuer?: string | null; itemDate?: string | null; url?: string | null; description?: string | null }[];
@@ -39,7 +42,16 @@ export function diffContent(published: StructuredContent | null | undefined, dra
   return out.sort((x, y) => PROFILE_FIELDS.indexOf(x.field as (typeof PROFILE_FIELDS)[number]) - PROFILE_FIELDS.indexOf(y.field as (typeof PROFILE_FIELDS)[number]));
 }
 
-const toCode = (x: string | { code?: string; id?: string }) => (typeof x === "string" ? x : (x.code ?? x.id ?? ""));
+/** Specialty or language reference from either content shape: a code, an id, or the workspace draft's `specialtyId`. */
+export const toCode = (x: string | { code?: string; id?: string; specialtyId?: string }) => (typeof x === "string" ? x : (x.code ?? x.id ?? x.specialtyId ?? ""));
+
+/**
+ * The workspace draft stores experience months as `YYYY-MM` (an
+ * `<input type="month">` value), which Postgres does not accept as a date.
+ * Months are stored as the first day of that month; full dates pass through.
+ */
+export const monthToDate = (m: string) => (/^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? `${m}-01` : m);
+
 const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 /**
@@ -71,7 +83,7 @@ export async function applyStructuredContent(tx: Db, practitionerId: string, c: 
     await tx.execute(sql`DELETE FROM experiences WHERE practitioner_id = ${practitionerId}`);
     for (const [i, e] of c.experiences.entries()) {
       await tx.execute(sql`INSERT INTO experiences (practitioner_id, role, organisation_name, start_month, end_month, description, sort_order)
-        VALUES (${practitionerId}, ${e.role}, ${e.organisationName}, ${e.startMonth}::date, ${e.endMonth ?? null}::date, ${e.description ?? null}, ${i})`);
+        VALUES (${practitionerId}, ${e.role}, ${e.organisationName}, ${monthToDate(e.startMonth)}::date, ${e.endMonth ? monthToDate(e.endMonth) : null}::date, ${e.description || null}, ${i})`);
     }
     applied.push("experiences");
   }
