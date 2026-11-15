@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { FollowUpSchema, updateEnquiry } from "@/lib/practice/enquiries";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { confirmRequestedTime, FollowUpSchema, updateEnquiry } from "@/lib/practice/enquiries";
 import { requireManage } from "@/lib/workspace/context";
 import { done, failTo, opt, str } from "@/lib/workspace/forms";
 
@@ -34,4 +36,20 @@ export async function enquiryAction(formData: FormData) {
     failTo(back, err);
   }
   done(back, { ok: OK[action] });
+}
+
+/** One tap on a requested time: creates the appointment and closes the enquiry as booked (CAL-10, BKG-07). */
+export async function confirmRequestedAction(formData: FormData) {
+  const back = `${PAGE}?show=${encodeURIComponent(str(formData, "show") || "open")}`;
+  let bookingId = "";
+  try {
+    const { viewer, practitioner } = await requireManage();
+    const enquiryId = z.uuid().parse(str(formData, "enquiryId"));
+    const actor = { userId: viewer.userId, role: viewer.grants.some((g) => g.role === "super_admin") ? "super_admin" : "practitioner" };
+    bookingId = (await confirmRequestedTime(practitioner.id, actor, enquiryId)).bookingId;
+    revalidatePath(PAGE);
+  } catch (err) {
+    failTo(back, err);
+  }
+  redirect(`/workspace/appointments/${bookingId}?ok=${encodeURIComponent("Appointment confirmed. Tell the patient it is booked.")}`);
 }

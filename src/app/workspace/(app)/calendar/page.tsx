@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { CopyLink } from "@/components/workspace/copy-link";
 import { Empty, Field, Notice, PageHeader, Section, StatePill } from "@/components/workspace/forms/ui";
 import { countAffectedBookings, formatIst, istToUtc, WEEKDAYS, WORKSPACE_TZ } from "@/lib/workspace/calendar";
 import { requireWorkspace } from "@/lib/workspace/context";
@@ -20,6 +21,7 @@ export default function Page({ searchParams }: PageProps<"/workspace/calendar">)
 }
 
 const PAGE = "/workspace/calendar";
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function todayIst(): string {
@@ -57,6 +59,21 @@ async function Calendar({ searchParams }: { searchParams: PageProps<"/workspace/
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Calendar" lede={`All times are ${WORKSPACE_TZ} (IST). Schedule version ${cal.scheduleVersion}. Public calendars show bookable slots only, never blocks or reasons (CAL-10).`} />
       <Notice ok={msg.ok} error={msg.error} />
+
+      <Section title="Share your calendar" lede="Your profile shows your open times for the next 7 days. Patients pick a time and you get it as a booking or a request. Leave, blocks and booked times are hidden; your reasons are never shown.">
+        {p.listingStatus !== "published" ? (
+          <Empty>Your public calendar goes live with your profile, once it is approved.</Empty>
+        ) : cal.rules.length === 0 ? (
+          <Empty>Add your weekly hours below first. Until then your profile shows no calendar.</Empty>
+        ) : (
+          <div className="grid gap-3">
+            <CopyLink url={`${SITE_URL}/physiotherapist/${p.slug}-${p.publicId}#availability`} />
+            <p className="text-sm">
+              <a className="underline" target="_blank" rel="noopener noreferrer" href={`https://wa.me/?text=${encodeURIComponent(`See my open times and request an appointment: ${SITE_URL}/physiotherapist/${p.slug}-${p.publicId}#availability`)}`}>Share on WhatsApp</a>
+            </p>
+          </div>
+        )}
+      </Section>
 
       <Section
         title={`Week of ${formatIst(new Date(`${weekStart}T00:00:00+05:30`), { day: "numeric", month: "short", year: "numeric" })}`}

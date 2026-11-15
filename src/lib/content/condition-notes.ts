@@ -1,0 +1,47 @@
+/**
+ * One plain-language sentence per condition for the condition-by-city pages.
+ * General information only: no treatment claims, no outcomes, no advice to
+ * act on (DIR-14). Not yet clinically reviewed (SEO-04); the page says so.
+ * Keys are the slugs in CONDITIONS (src/db/seed/master-data.ts).
+ */
+export const CONDITION_NOTES: Record<string, string> = {
+  "low-back-pain": "Low back pain is pain or stiffness between the lower ribs and the hips; it is very common and often has no single identifiable cause.",
+  sciatica: "Sciatica is pain that travels from the lower back or buttock down the leg along the sciatic nerve, sometimes with tingling or numbness.",
+  "slipped-disc": "A slipped disc, also called a herniated or prolapsed disc, is when the soft centre of a spinal disc bulges out and may press on a nearby nerve.",
+  "neck-pain": "Neck pain is pain or stiffness in the neck that can spread to the shoulders or upper back, often linked to posture, strain or wear in the joints.",
+  "cervical-spondylosis": "Cervical spondylosis is age-related wear of the discs and joints in the neck, which can cause neck pain and stiffness.",
+  "lumbar-spondylosis": "Lumbar spondylosis is age-related wear of the discs and joints in the lower back, which can cause pain and stiffness.",
+  "posture-related-pain": "Posture-related pain is discomfort in the neck, shoulders or back linked to long periods in one position, such as desk work or driving.",
+  scoliosis: "Scoliosis is a sideways curve of the spine, most often first noticed in childhood or the teenage years.",
+  "frozen-shoulder": "Frozen shoulder, or adhesive capsulitis, is a painful, stiff shoulder in which movement becomes gradually more limited and then slowly returns.",
+  "rotator-cuff-injury": "A rotator cuff injury affects the group of muscles and tendons that steady the shoulder joint, causing pain or weakness when lifting the arm.",
+  "shoulder-pain": "Shoulder pain can come from the joint, the muscles and tendons around it, or the neck, and has many possible causes.",
+  "tennis-elbow": "Tennis elbow is pain on the outer side of the elbow from overuse of the forearm muscles; most people who get it do not play tennis.",
+  "carpal-tunnel-syndrome": "Carpal tunnel syndrome is pressure on a nerve at the wrist that causes tingling, numbness or weakness in the hand.",
+  "knee-pain": "Knee pain can come from the joint, the ligaments, the cartilage or the muscles around the knee, after an injury or gradually over time.",
+  "knee-osteoarthritis": "Knee osteoarthritis is gradual wear of the cartilage in the knee joint, causing pain, stiffness and sometimes swelling.",
+  "acl-and-ligament-injury": "An ACL or other knee ligament injury is a sprain or tear of one of the bands that hold the knee stable, usually from a twist or a sports injury.",
+  "meniscus-injury": "A meniscus injury is a tear in the cartilage that cushions the knee, often causing pain, swelling or a catching feeling.",
+  "hip-pain": "Hip pain can be felt in the groin, the outer hip or the buttock and can come from the joint itself or the muscles and tendons around it.",
+  "ankle-sprain": "An ankle sprain is a stretch or tear of the ligaments around the ankle, usually after the foot rolls inward.",
+  "plantar-fasciitis": "Plantar fasciitis is pain under the heel from irritation of the band of tissue that runs along the sole of the foot.",
+  "heel-pain": "Heel pain is pain under or behind the heel, often from the plantar fascia or the Achilles tendon.",
+  "knee-replacement-rehabilitation": "Knee replacement rehabilitation is the guided exercise and walking practice that follows knee replacement surgery.",
+  "hip-replacement-rehabilitation": "Hip replacement rehabilitation is the guided exercise and walking practice that follows hip replacement surgery.",
+  "fracture-rehabilitation": "Fracture rehabilitation is the work of regaining movement and strength after a broken bone has been treated.",
+  "sports-injury": "A sports injury is damage to a muscle, tendon, ligament or joint that happens during sport or exercise.",
+  "muscle-strain": "A muscle strain is an overstretched or torn muscle, often called a pulled muscle.",
+  "stroke-rehabilitation": "Stroke rehabilitation is the therapy that helps a person relearn movement, balance and daily activities after a stroke.",
+  "parkinsons-disease": "Parkinson's disease is a long-term condition of the nervous system that affects movement, causing slowness, stiffness and tremor.",
+  "bells-palsy": "Bell's palsy is sudden weakness on one side of the face, caused by a problem with the facial nerve.",
+  "vertigo-and-bppv": "Vertigo is a spinning sensation; BPPV is a common inner-ear cause in which certain head movements bring on brief spells of spinning.",
+  "spinal-cord-injury": "A spinal cord injury is damage to the spinal cord that changes movement, sensation or both below the level of the injury.",
+  "cerebral-palsy": "Cerebral palsy is a group of lifelong conditions affecting movement and posture, caused by differences in how the brain developed early in life.",
+  "developmental-delay-in-children": "Developmental delay means a child is slower than expected to reach milestones such as sitting, crawling or walking.",
+  arthritis: "Arthritis is pain, swelling and stiffness in one or more joints; osteoarthritis and rheumatoid arthritis are the most common types.",
+  "balance-problems-and-falls": "Balance problems make a person feel unsteady when standing or walking and raise the risk of falls, particularly in older adults.",
+  "pregnancy-and-postnatal-back-pain": "Back and pelvic pain is common during pregnancy and after birth as the body changes and then recovers.",
+  "pelvic-floor-weakness": "Pelvic floor weakness affects the muscles that support the bladder and bowel, and can cause leaking or a feeling of heaviness.",
+  "breathing-and-chest-physiotherapy": "Chest physiotherapy uses breathing exercises and positioning to help clear the lungs and ease breathing in people with lung conditions.",
+  "headache-and-jaw-pain": "Some headaches and jaw pain are linked to the neck or to the jaw joint and the muscles used for chewing.",
+};

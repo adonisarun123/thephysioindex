@@ -80,6 +80,7 @@ function ApprovalCardView({ c }: { c: ApprovalCard }) {
               {c.languages.length ? <><span className="font-medium">Languages:</span> {c.languages.join(", ")}</> : null}
             </p>
           ) : null}
+          {c.conditions.length ? <p><span className="font-medium">Conditions treated:</span> {c.conditions.join(", ")}</p> : null}
           {c.places.length ? (
             <div>
               <p className="font-medium">Where and what</p>

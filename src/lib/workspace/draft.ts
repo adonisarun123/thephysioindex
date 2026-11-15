@@ -59,6 +59,9 @@ export const SpecialtiesSchema = z
   .max(8)
   .refine((s) => s.filter((x) => x.isPrimary).length <= 1, { message: "Choose one primary area of practice" });
 
+/** Conditions treated: ids from the `conditions` vocabulary. */
+export const MAX_CONDITIONS = 20;
+
 export const DraftSchema = z.object({
   identity: IdentitySchema.optional(),
   about: z.string().optional(),
@@ -66,6 +69,7 @@ export const DraftSchema = z.object({
   experiences: z.array(ExperienceSchema).optional(),
   specialties: SpecialtiesSchema.optional(),
   languages: z.array(z.uuid()).max(10).optional(),
+  conditions: z.array(z.uuid()).max(MAX_CONDITIONS, `Choose up to ${MAX_CONDITIONS} conditions`).optional(),
   portfolio: z.array(PortfolioSchema).max(20).optional(),
 });
 

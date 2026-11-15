@@ -29,6 +29,7 @@ export type ApprovalCard = {
   about: string | null;
   qualifications: { degree: string; institution: string; completionYear: number | null }[];
   specialties: string[];
+  conditions: string[];
   languages: string[];
   credentials: { id: string; type: string; authority: string; number: string | null; status: string; lookupUrl: string | null; sameNumberElsewhere: number; hasEvidence: boolean }[];
   places: { label: string; kind: string; state: string; services: { name: string; mode: string; minutes: number; pricePaise: number }[] }[];
@@ -42,6 +43,8 @@ export async function listApprovals(): Promise<ApprovalCard[]> {
       u.email, u.mobile, pv.structured_content AS content, coalesce(pv.changed_fields, '{}') AS "changedFields",
       (SELECT coalesce(json_agg(s.label ORDER BY s.label), '[]') FROM specialties s
          WHERE s.id::text IN (SELECT x ->> 'specialtyId' FROM jsonb_array_elements(coalesce(pv.structured_content -> 'specialties', '[]'::jsonb)) x)) AS specialties,
+      (SELECT coalesce(json_agg(cd.label ORDER BY cd.sort_order), '[]') FROM conditions cd
+         WHERE cd.id::text IN (SELECT jsonb_array_elements_text(coalesce(pv.structured_content -> 'conditions', '[]'::jsonb)))) AS conditions,
       (SELECT coalesce(json_agg(lg.label ORDER BY lg.label), '[]') FROM languages lg
          WHERE lg.id::text IN (SELECT jsonb_array_elements_text(coalesce(pv.structured_content -> 'languages', '[]'::jsonb)))) AS languages,
       (SELECT coalesce(json_agg(json_build_object('id', cr.id, 'type', cr.type, 'authority', a.name, 'number', cr.number_original, 'status', cr.status, 'lookupUrl', a.lookup_url,
@@ -80,6 +83,7 @@ export async function listApprovals(): Promise<ApprovalCard[]> {
       about: content.about?.trim() || null,
       qualifications: content.qualifications ?? [],
       specialties: r.specialties as string[],
+      conditions: (r.conditions as string[]) ?? [],
       languages: r.languages as string[],
       credentials: (r.credentials as ApprovalCard["credentials"]).map((c) => ({ ...c, sameNumberElsewhere: Number(c.sameNumberElsewhere) })),
       places: r.places as ApprovalCard["places"],

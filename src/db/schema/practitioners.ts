@@ -29,7 +29,7 @@ import {
   practitionerSource,
   profileVersionState,
 } from "./enums";
-import { languages, specialties, states } from "./geography";
+import { conditions, languages, specialties, states } from "./geography";
 import { users } from "./identity";
 
 /** tsvector column maintained by trigger (see SQL migration). */
@@ -222,6 +222,20 @@ export const credentials = pgTable(
     uniqueIndex("credentials_verified_number_uq")
       .on(t.authorityId, t.type, t.numberNormalised)
       .where(sql`${t.status} = 'registration_checked' AND ${t.numberNormalised} IS NOT NULL`),
+  ],
+);
+
+/** Published "conditions treated" for a practitioner; written only when a profile version is approved (PRO-10). */
+export const practitionerConditions = pgTable(
+  "practitioner_conditions",
+  {
+    practitionerId: uuid("practitioner_id").notNull().references(() => practitioners.id),
+    conditionId: uuid("condition_id").notNull().references(() => conditions.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("practitioner_conditions_uq").on(t.practitionerId, t.conditionId),
+    index("practitioner_conditions_condition_idx").on(t.conditionId),
   ],
 );
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { ApiError } from "@/lib/api";
 import { audit } from "@/lib/audit";
+import { createManualBooking } from "@/lib/booking/engine";
 
 /**
  * Practitioner enquiry inbox (addendum ENQ-01..04). Enquiries come from the
@@ -32,6 +33,10 @@ export type InboxEnquiry = {
   contactedAt: Date | null;
   closedAt: Date | null;
   createdAt: Date;
+  /** Time the patient picked on the public calendar, with the service it was for; null for a plain enquiry. */
+  requested: { startsAt: Date; offeringName: string; durationMin: number } | null;
+  /** Appointment created by confirming the requested time. */
+  bookingId: string | null;
 };
 
 export type InboxFilter = "open" | "due" | "closed" | "all";
@@ -46,10 +51,13 @@ export async function listInbox(practitionerId: string, filter: InboxFilter): Pr
   const res = await db().execute<{
     id: string; requester_name: string; requester_mobile: string; message: string | null; status: InboxEnquiry["status"]; outcome: Outcome | null;
     follow_up_on: string | null; practitioner_note: string | null; contacted_at: string | null; closed_at: string | null; created_at: string;
+    requested_starts_at: string | null; offering_name: string | null; duration_min: number | null; booking_id: string | null;
   }>(sql`
     SELECT e.id, e.requester_name, e.requester_mobile, e.message, e.status, e.outcome, e.follow_up_on::text AS follow_up_on, e.practitioner_note,
-           e.contacted_at, e.closed_at, e.created_at
+           e.contacted_at, e.closed_at, e.created_at, e.requested_starts_at, e.booking_id, o.display_name AS offering_name, ov.duration_min
     FROM enquiries e
+    LEFT JOIN offerings o ON o.id = e.offering_id AND o.practitioner_id = e.practitioner_id
+    LEFT JOIN offering_versions ov ON ov.id = o.current_version_id
     WHERE e.practitioner_id = ${practitionerId} ${where}
     ORDER BY (e.status IN ('new', 'forwarded')) DESC, e.follow_up_on ASC NULLS LAST, e.created_at DESC
     LIMIT 200`);
@@ -57,6 +65,8 @@ export async function listInbox(practitionerId: string, filter: InboxFilter): Pr
     id: r.id, requesterName: r.requester_name, requesterMobile: r.requester_mobile, message: r.message, status: r.status, outcome: r.outcome,
     followUpOn: r.follow_up_on, practitionerNote: r.practitioner_note, contactedAt: r.contacted_at ? new Date(r.contacted_at) : null,
     closedAt: r.closed_at ? new Date(r.closed_at) : null, createdAt: new Date(r.created_at),
+    requested: r.requested_starts_at && r.offering_name ? { startsAt: new Date(r.requested_starts_at), offeringName: r.offering_name, durationMin: Number(r.duration_min ?? 0) } : null,
+    bookingId: r.booking_id,
   }));
 }
 
@@ -111,4 +121,38 @@ export function whatsappChatUrl(mobileE164: string, text: string): string {
 /** First name only for notifications (ENQ-04: no mobile numbers in SMS/WhatsApp/email bodies). */
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0]?.slice(0, 40) || "a patient";
+}
+
+/**
+ * Confirms the time a patient requested from the public calendar (CAL-10):
+ * creates the appointment through the same locked path as a phone booking
+ * (BKG-07, so an overlap is refused by the exclusion constraint), then closes
+ * the enquiry as booked. The enquiry id is the idempotency key, so a double
+ * tap or a retry returns the same appointment instead of creating a second.
+ */
+export async function confirmRequestedTime(practitionerId: string, actor: { userId: string; role: string }, enquiryId: string): Promise<{ bookingId: string }> {
+  const res = await db().execute<{ requester_name: string; requester_mobile: string; requested_starts_at: string | null; offering_id: string | null; status: string; booking_id: string | null }>(sql`
+    SELECT requester_name, requester_mobile, requested_starts_at, offering_id, status, booking_id
+    FROM enquiries WHERE id = ${enquiryId} AND practitioner_id = ${practitionerId}`);
+  const e = res.rows[0];
+  if (!e) throw new ApiError("NOT_FOUND", "Enquiry not found");
+  if (e.booking_id) return { bookingId: e.booking_id };
+  if (e.status === "closed") throw new ApiError("CONFLICT", "This enquiry is closed. Reopen it first.");
+  if (!e.requested_starts_at || !e.offering_id) throw new ApiError("INVALID_INPUT", "This enquiry has no requested time. Add the appointment from Appointments instead.");
+  const startsAt = new Date(e.requested_starts_at);
+  if (startsAt.getTime() <= Date.now()) throw new ApiError("CONFLICT", "The requested time has passed. Agree a new time with the patient and add it from Appointments.");
+  const booking = await createManualBooking(actor, {
+    practitionerId,
+    offeringId: e.offering_id,
+    startsAt: startsAt.toISOString(),
+    patientName: e.requester_name,
+    patientMobile: e.requester_mobile,
+    source: "phone",
+    idempotencyKey: enquiryId,
+  });
+  await db().execute(sql`
+    UPDATE enquiries SET status = 'closed', outcome = 'booked', closed_at = now(), contacted_at = coalesce(contacted_at, now()), follow_up_on = NULL, booking_id = ${booking.bookingId}
+    WHERE id = ${enquiryId} AND practitioner_id = ${practitionerId}`);
+  await audit({ actorUserId: actor.userId, action: "enquiry.confirm_requested_time", objectType: "enquiry", objectId: enquiryId, changedFields: { bookingId: booking.bookingId } });
+  return { bookingId: booking.bookingId };
 }

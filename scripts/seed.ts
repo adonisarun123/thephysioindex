@@ -21,6 +21,7 @@ import {
   POLICIES,
   SERVICES,
   SPECIALTIES,
+  CONDITIONS,
 } from "../src/db/seed/master-data";
 import { EXERCISE_LIBRARY } from "../src/db/seed/exercises";
 import { normaliseAlias, slugify } from "../src/lib/slug";
@@ -128,6 +129,12 @@ async function main() {
       set: { label: sql`excluded.label`, description: sql`excluded.description`, requiresEvidence: sql`excluded.requires_evidence`, sortOrder: sql`excluded.sort_order` },
     });
   counts.specialties = SPECIALTIES.length;
+
+  await db
+    .insert(schema.conditions)
+    .values(CONDITIONS.map((c, i) => ({ slug: c.slug, label: c.label, bodyArea: c.bodyArea, sortOrder: i })))
+    .onConflictDoUpdate({ target: schema.conditions.slug, set: { label: sql`excluded.label`, bodyArea: sql`excluded.body_area`, sortOrder: sql`excluded.sort_order` } });
+  counts.conditions = CONDITIONS.length;
 
   await db
     .insert(schema.languages)

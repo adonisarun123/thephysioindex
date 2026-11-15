@@ -30,6 +30,8 @@ export type StructuredContent = {
    * workspace draft stores `{ specialtyId, isPrimary }` (src/lib/workspace/draft.ts).
    */
   specialties?: (string | { code?: string; id?: string; specialtyId?: string; isPrimary?: boolean })[];
+  /** Ids from the `conditions` vocabulary (conditions treated). */
+  conditions?: string[];
   /** Language codes or ids. */
   languages?: (string | { code?: string; id?: string })[];
   portfolio?: { kind: "award" | "certification" | "membership" | "publication" | "website" | "social"; title: string; issuer?: string | null; itemDate?: string | null; url?: string | null; description?: string | null }[];
@@ -131,6 +133,14 @@ export async function applyStructuredContent(tx: Db, practitionerId: string, c: 
         ON CONFLICT DO NOTHING`);
     }
     applied.push("specialties");
+  }
+  if (Array.isArray(c.conditions)) {
+    await tx.execute(sql`DELETE FROM practitioner_conditions WHERE practitioner_id = ${practitionerId}`);
+    for (const cid of c.conditions.filter((x) => typeof x === "string" && isUuid(x))) {
+      await tx.execute(sql`INSERT INTO practitioner_conditions (practitioner_id, condition_id)
+        SELECT ${practitionerId}, cd.id FROM conditions cd WHERE cd.id = ${cid}::uuid AND cd.active ON CONFLICT DO NOTHING`);
+    }
+    applied.push("conditions");
   }
   if (Array.isArray(c.languages)) {
     await tx.execute(sql`DELETE FROM practitioner_languages WHERE practitioner_id = ${practitionerId}`);

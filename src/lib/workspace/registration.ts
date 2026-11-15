@@ -6,8 +6,8 @@ import { audit } from "@/lib/audit";
 import { normaliseIndianMobile } from "@/lib/messaging/sms";
 import { attachLeadToRegistration } from "@/lib/practitioner-leads";
 import { newPublicId } from "@/lib/public-id";
-import { currentPolicyVersions } from "./catalog";
-import { createClinicBranch, createServiceArea } from "./clinics";
+import { currentPolicyVersions, findSameClinicBranch } from "./catalog";
+import { createClinicBranch, createServiceArea, joinBranch } from "./clinics";
 import { addCredential } from "./credentials";
 import { saveDraftSection } from "./draft";
 import { plainText } from "./forms";
@@ -40,6 +40,8 @@ export const RegistrationSchema = z
     practiceMode: z.enum(PRACTICE_MODES.map((m) => m.value) as [string, ...string[]], { error: "Tell us where you see patients" }),
     clinicName: z.string().trim().max(160).optional(),
     addressLine1: z.string().trim().max(200).optional(),
+    /** Set when the practitioner picked an existing clinic from the suggestions (LOC-02). */
+    joinBranchId: z.uuid().optional(),
     stateId: z.uuid("Choose a state"),
     cityId: z.uuid("Choose a city"),
     localityId: z.string().optional(),
@@ -50,8 +52,10 @@ export const RegistrationSchema = z
   })
   .superRefine((v, ctx) => {
     const clinic = PRACTICE_MODES.find((m) => m.value === v.practiceMode)?.kind === "clinic";
-    if (clinic && (v.clinicName?.length ?? 0) < 2) ctx.addIssue({ code: "custom", path: ["clinicName"], message: "Enter the clinic name" });
-    if (clinic && (v.addressLine1?.length ?? 0) < 3) ctx.addIssue({ code: "custom", path: ["addressLine1"], message: "Enter the clinic address" });
+    const joining = clinic && Boolean(v.joinBranchId);
+    if (clinic && !joining && (v.clinicName?.length ?? 0) < 2) ctx.addIssue({ code: "custom", path: ["clinicName"], message: "Enter the clinic name" });
+    if (clinic && !joining && (v.addressLine1?.length ?? 0) < 3) ctx.addIssue({ code: "custom", path: ["addressLine1"], message: "Enter the clinic address" });
+    if (joining) return; // the clinic already has its locality
     const hasLocality = v.localityId && v.localityId !== "__new" && Uuid.safeParse(v.localityId).success;
     if (!hasLocality && (v.newLocalityName?.length ?? 0) < 2) ctx.addIssue({ code: "custom", path: ["localityId"], message: "Choose your locality or type its name" });
   });
@@ -76,6 +80,20 @@ export async function registerPractitioner(who: Registrant, input: RegistrationI
   const recent = await db().execute<{ n: string | number }>(sql`SELECT count(*) AS n FROM practitioner_signups WHERE mobile = ${mobile} AND created_at > now() - interval '1 day'`);
   if (Number(recent.rows[0]?.n ?? 0) >= DAILY_LIMIT_PER_MOBILE) throw new ApiError("RATE_LIMITED", "Too many registrations with this mobile today. Please try tomorrow or contact us.");
 
+  // Colleagues from one clinic share one clinic record (LOC-02): the branch they picked, or one with
+  // the same name at the same PIN code. Resolved before anything is created so a bad id fails cleanly.
+  const kind = PRACTICE_MODES.find((m) => m.value === input.practiceMode)?.kind;
+  let existingBranchId: string | null = null;
+  if (kind !== "service_area") {
+    if (input.joinBranchId) {
+      const b = await db().execute<{ id: string }>(sql`SELECT b.id FROM branches b JOIN clinics c ON c.id = b.clinic_id WHERE b.id = ${input.joinBranchId} AND b.kind = 'clinic' AND b.status <> 'archived' AND c.status <> 'archived'`);
+      if (!b.rows[0]) throw new ApiError("INVALID_INPUT", "That clinic is no longer listed. Enter your clinic's name and address instead.");
+      existingBranchId = b.rows[0].id;
+    } else {
+      existingBranchId = await findSameClinicBranch(input.clinicName ?? "", input.cityId, input.pinCode);
+    }
+  }
+
   const name = plainText(input.fullName, 120);
   const practitionerId = await createPractitioner(who.userId, { displayName: name, designation: "Physiotherapist", headline: "", gender: "unset" });
   await saveDraftSection(practitionerId, who.userId, "qualifications", [{ degree: plainText(input.degree, 120), institution: plainText(input.institution, 160), completionYear: null, inProgress: false }]);
@@ -83,9 +101,11 @@ export async function registerPractitioner(who: Registrant, input: RegistrationI
 
   const localityId = input.localityId && input.localityId !== "__new" ? input.localityId : undefined;
   const newLocalityName = localityId ? undefined : input.newLocalityName;
-  const kind = PRACTICE_MODES.find((m) => m.value === input.practiceMode)?.kind;
   if (kind === "service_area") {
     await createServiceArea(practitionerId, who.userId, { stateId: input.stateId, cityId: input.cityId, localityId, newLocalityName, pinCode: input.pinCode });
+  } else if (existingBranchId) {
+    // Pending like every association; the reviewer sees it on the approval card (LOC-02, LOC-03).
+    await joinBranch(practitionerId, who.userId, existingBranchId);
   } else {
     await createClinicBranch(practitionerId, who.userId, {
       clinicName: plainText(input.clinicName ?? "", 160),

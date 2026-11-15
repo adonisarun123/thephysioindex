@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getPublicClinic } from "@/lib/directory";
+import { formatPaise } from "@/lib/money";
 import { clinicJsonLd } from "@/lib/profile-jsonld";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thephysioindex.com";
@@ -104,11 +105,20 @@ async function ClinicPage({ params }: { params: PageProps<"/clinics/[slug]">["pa
             {b.facilities?.length ? <p className="mt-2 text-sm text-muted">Facilities: {b.facilities.join(", ")}</p> : null}
             <h3 className="mt-4 font-semibold">Physiotherapists at this location</h3>
             {b.practitioners.length ? (
-              <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+              <ul className="mt-3 grid gap-3 sm:grid-cols-2">
                 {b.practitioners.map((p) => (
-                  <li key={p.publicId}>
-                    <Link href={`/physiotherapist/${p.slug}-${p.publicId}`} className="underline">{p.displayName}</Link>
-                    {p.designation ? <span className="text-muted">, {p.designation}</span> : null}
+                  <li key={p.publicId} className="flex items-center gap-3 rounded-[var(--r-panel)] border border-line p-3">
+                    {p.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- ImageKit already serves the sized image
+                      <img src={p.photoUrl} alt="" width={56} height={56} className="h-14 w-14 shrink-0 rounded-full object-cover" loading="lazy" />
+                    ) : (
+                      <span aria-hidden className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-soft text-lg font-semibold text-navy">{p.displayName.trim().charAt(0).toUpperCase()}</span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <Link href={p.path} className="font-medium hover:underline">{p.displayName}</Link>
+                      <p className="truncate text-sm text-muted">{[p.primarySpecialty ?? p.designation, p.minFeePaise != null ? `from ${formatPaise(p.minFeePaise)}` : null].filter(Boolean).join(" · ")}</p>
+                    </div>
+                    <Link href={p.bookable ? `${p.path}/book` : `${p.path}#availability`} className="btn btn-secondary btn-sm shrink-0">{p.bookable ? "Book" : "View"}</Link>
                   </li>
                 ))}
               </ul>

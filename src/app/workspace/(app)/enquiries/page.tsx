@@ -4,11 +4,12 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { Empty, Notice, PageHeader, Section, StatePill } from "@/components/workspace/forms/ui";
 import { inboxCounts, listInbox, OUTCOMES, whatsappChatUrl, type InboxFilter } from "@/lib/practice/enquiries";
+import { nowMs } from "@/lib/booking/time";
 import { istToday } from "@/lib/practice/exercise-plans";
 import { formatIst } from "@/lib/workspace/calendar";
 import { requireWorkspace } from "@/lib/workspace/context";
 import { readMessage } from "@/lib/workspace/forms";
-import { enquiryAction } from "./actions";
+import { confirmRequestedAction, enquiryAction } from "./actions";
 
 export const metadata: Metadata = { title: "Enquiries" };
 
@@ -44,6 +45,7 @@ async function Inbox({ searchParams }: { searchParams: PageProps<"/workspace/enq
   const [rows, counts] = await Promise.all([listInbox(p.id, show), inboxCounts(p.id)]);
   const msg = readMessage(sp);
   const today = istToday();
+  const now = nowMs();
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -66,7 +68,11 @@ async function Inbox({ searchParams }: { searchParams: PageProps<"/workspace/enq
           <ul className="grid gap-4">
             {rows.map((e) => {
               const overdue = e.status !== "closed" && e.followUpOn !== null && e.followUpOn <= today;
-              const greeting = `Hello ${e.requesterName.split(/\s+/)[0]}, this is ${p.displayName}. You enquired on The Physio Index — how can I help?`;
+              const requestedLabel = e.requested ? formatIst(e.requested.startsAt, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : null;
+              const canConfirm = e.requested !== null && e.status !== "closed" && e.requested.startsAt.getTime() > now;
+              const greeting = requestedLabel
+                ? `Hello ${e.requesterName.split(/\s+/)[0]}, this is ${p.displayName}. You requested ${requestedLabel} on The Physio Index.`
+                : `Hello ${e.requesterName.split(/\s+/)[0]}, this is ${p.displayName}. You enquired on The Physio Index — how can I help?`;
               return (
                 <li key={e.id} className={`rounded-[var(--r-sm)] border p-4 text-sm ${overdue ? "border-mark bg-mark-soft" : "border-line"}`}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -82,6 +88,17 @@ async function Inbox({ searchParams }: { searchParams: PageProps<"/workspace/enq
                     <StatePill state={STATUS_LABEL[e.status] ?? e.status} />
                   </div>
                   {e.message ? <p className="mt-2 whitespace-pre-line">{e.message}</p> : <p className="mt-2 text-muted">No message.</p>}
+                  {e.bookingId ? <p className="mt-2"><Link href={`/workspace/appointments/${e.bookingId}`} className="underline">View the appointment</Link></p> : null}
+                  {canConfirm && e.requested ? (
+                    <form action={confirmRequestedAction} className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--r-sm)] border border-brand bg-brand-soft p-3">
+                      <input type="hidden" name="enquiryId" value={e.id} />
+                      <input type="hidden" name="show" value={show} />
+                      <p><span className="font-medium">Requested: {requestedLabel}</span><span className="block text-muted">{e.requested.offeringName}, {e.requested.durationMin} min. Confirming adds it to your calendar and blocks the time.</span></p>
+                      <button type="submit" className="btn btn-primary py-1.5 text-sm">Confirm appointment</button>
+                    </form>
+                  ) : e.requested && e.status !== "closed" ? (
+                    <p className="mt-2 text-muted">Requested {requestedLabel}, which has passed. Agree a new time and <Link href="/workspace/appointments/new" className="underline">add the appointment</Link>.</p>
+                  ) : null}
 
                   {e.status !== "closed" ? (
                     <>
