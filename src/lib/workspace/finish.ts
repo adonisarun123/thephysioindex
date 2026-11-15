@@ -4,7 +4,7 @@ import { currentPolicyVersions, offeringDefaults } from "./catalog";
 import { mutateSchedule, WORKSPACE_TZ } from "./calendar";
 import { ABOUT_MIN_CHARS, completionPercent, profileChecklist } from "./completion";
 import { addCredential } from "./credentials";
-import { saveDraftSection, submitDraft, validateForSubmission } from "./draft";
+import { MAX_CONDITIONS, saveDraftSection, submitDraft, validateForSubmission } from "./draft";
 import { plainText } from "./forms";
 import { createOffering } from "./offerings";
 import { onboardingStatus, recordConsents } from "./onboarding";
@@ -14,7 +14,8 @@ import { listAssociations } from "./queries";
  * One-screen profile completion (PRO-03; owner decision 8 Nov 2026: whole
  * onboarding under two minutes). Everything the 100% checklist still needs is
  * saved in one submit: About, main area of practice, languages, one service
- * with its fee at every place they practise, and weekly hours at each clinic.
+ * with its fee at every place they practise, and weekly hours at each clinic
+ * (or, for home-visit-only practitioners, at each area they cover).
  * When that brings the profile to 100% it is submitted for verification in the
  * same step. Anything already done is left as it is.
  */
@@ -30,6 +31,8 @@ export const FinishSchema = z
     /** Other areas they treat, ticked on the finish screen (owner request 11 Nov 2026). Optional; never blocks submission. */
     otherSpecialtyIds: z.array(z.uuid()).max(MAX_SPECIALTIES - 1, `Choose up to ${MAX_SPECIALTIES - 1} other areas`).optional(),
     languageIds: z.array(z.uuid()).min(1, "Choose at least one language").optional(),
+    /** Conditions treated, ticked on the finish screen. Optional; never blocks submission. */
+    conditionIds: z.array(z.uuid()).max(MAX_CONDITIONS, `Choose up to ${MAX_CONDITIONS} conditions`).optional(),
     service: z.object({ serviceId: z.uuid("Choose a service"), displayName: z.string().trim().min(2).max(120), feePaise: z.number().int().min(0).max(10_000_000) }).optional(),
     hours: z
       .object({ weekdays: z.array(z.number().int().min(0).max(6)).min(1, "Choose at least one day"), localStart: z.string().regex(TIME), localEnd: z.string().regex(TIME) })
@@ -58,6 +61,7 @@ export async function finishProfile(practitionerId: string, userId: string, list
     await saveDraftSection(practitionerId, userId, "specialties", mergeSpecialties(d.specialties ?? [], input.primarySpecialtyId, input.otherSpecialtyIds ?? []));
   }
   if (input.languageIds) await saveDraftSection(practitionerId, userId, "languages", input.languageIds);
+  if (input.conditionIds?.length) await saveDraftSection(practitionerId, userId, "conditions", [...new Set(input.conditionIds)]);
   if (input.consent && !before.consents) {
     const v = await currentPolicyVersions();
     await recordConsents(practitionerId, userId, { providerTerms: v.providerTerms, privacyNotice: v.privacyNotice });
@@ -85,7 +89,10 @@ export async function finishProfile(practitionerId: string, userId: string, list
     }
   }
 
-  const clinics = live.filter((a) => a.kind !== "service_area");
+  // Clinics when there are any; otherwise the home-visit areas, so a home-visit physiotherapist's
+  // public calendar has open times to request (CAL-10). Hours stay optional for them (completion.ts).
+  const clinicPlaces = live.filter((a) => a.kind !== "service_area");
+  const clinics = clinicPlaces.length > 0 ? clinicPlaces : live;
   if (input.hours && clinics.length > 0 && before.availabilityRuleCount === 0) {
     const h = input.hours;
     const today = new Date().toLocaleDateString("en-CA", { timeZone: WORKSPACE_TZ });

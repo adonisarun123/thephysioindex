@@ -120,7 +120,10 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
     ? sql`greatest(
         ts_rank(p.search_vector, plainto_tsquery('simple', ${qTrim})),
         similarity(lower(p.display_name), lower(${qTrim})),
-        similarity(lower(c.name), lower(${qTrim})) * 0.8
+        similarity(lower(c.name), lower(${qTrim})) * 0.8,
+        -- A search for a condition ("frozen shoulder") finds the physiotherapists who list it.
+        (SELECT coalesce(max(similarity(lower(cd.label), lower(${qTrim}))), 0) * 0.9
+           FROM practitioner_conditions pc JOIN conditions cd ON cd.id = pc.condition_id AND cd.active WHERE pc.practitioner_id = p.id)
       )`
     : sql`0::real`;
   if (hasQ) {
@@ -128,6 +131,8 @@ export async function searchPractitioners(f: SearchFilters): Promise<SearchResul
       p.search_vector @@ plainto_tsquery('simple', ${qTrim})
       OR lower(p.display_name) % lower(${qTrim})
       OR lower(c.name) % lower(${qTrim})
+      OR EXISTS (SELECT 1 FROM practitioner_conditions pc JOIN conditions cd ON cd.id = pc.condition_id AND cd.active
+                 WHERE pc.practitioner_id = p.id AND (lower(cd.label) % lower(${qTrim}) OR lower(cd.label) LIKE '%' || lower(${qTrim}) || '%'))
     )`);
   }
 
@@ -332,6 +337,8 @@ export type PublicProfile = {
   qualifications: { degree: string; institution: string; completionYear: number | null; inProgress: boolean }[];
   experiences: { role: string; organisationName: string; startMonth: string; endMonth: string | null; description: string | null }[];
   specialties: { label: string; slug: string; isPrimary: boolean }[];
+  /** Conditions the practitioner ticked and a reviewer saw at approval. */
+  conditions: { label: string; slug: string; bodyArea: string }[];
   languages: { label: string; code: string }[];
   portfolio: { kind: string; title: string; issuer: string | null; itemDate: string | null; url: string | null; description: string | null }[];
   branches: {
@@ -400,6 +407,8 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
         FROM experiences e WHERE e.practitioner_id = p.id) AS experiences,
       (SELECT coalesce(json_agg(json_build_object('label', s.label, 'slug', s.slug, 'isPrimary', ps.is_primary) ORDER BY ps.is_primary DESC, s.sort_order), '[]'::json)
         FROM practitioner_specialties ps JOIN specialties s ON s.id = ps.specialty_id WHERE ps.practitioner_id = p.id) AS specialties,
+      (SELECT coalesce(json_agg(json_build_object('label', cd.label, 'slug', cd.slug, 'bodyArea', cd.body_area) ORDER BY cd.sort_order), '[]'::json)
+        FROM practitioner_conditions pc JOIN conditions cd ON cd.id = pc.condition_id AND cd.active WHERE pc.practitioner_id = p.id) AS conditions,
       (SELECT coalesce(json_agg(json_build_object('label', lg.label, 'code', lg.code) ORDER BY lg.sort_order), '[]'::json)
         FROM practitioner_languages pl JOIN languages lg ON lg.id = pl.language_id WHERE pl.practitioner_id = p.id) AS languages,
       (SELECT coalesce(json_agg(json_build_object('kind', pi.kind, 'title', pi.title, 'issuer', pi.issuer, 'itemDate', pi.item_date, 'url', pi.url, 'description', pi.description) ORDER BY pi.sort_order, pi.item_date DESC NULLS LAST), '[]'::json)
@@ -478,6 +487,7 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfile 
     qualifications: r.qualifications as PublicProfile["qualifications"],
     experiences: r.experiences as PublicProfile["experiences"],
     specialties: r.specialties as PublicProfile["specialties"],
+    conditions: (r.conditions as PublicProfile["conditions"]) ?? [],
     languages: r.languages as PublicProfile["languages"],
     portfolio: r.portfolio as PublicProfile["portfolio"],
     branches: (r.branches as PublicProfile["branches"]).map((b) => ({

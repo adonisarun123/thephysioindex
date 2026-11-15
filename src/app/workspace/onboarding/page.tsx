@@ -9,7 +9,7 @@ import { PhotoUploader } from "@/components/workspace/photo-uploader";
 import { imageKitEnabled } from "@/lib/media/imagekit";
 import { photoState } from "@/lib/workspace/photo";
 import { getViewer } from "@/lib/auth/session";
-import { listAuthorityOptions, listLanguageOptions, listServiceOptions, listSpecialtyOptions } from "@/lib/workspace/catalog";
+import { listAuthorityOptions, listLanguageOptions, listServiceOptions, listConditionOptions, listSpecialtyOptions } from "@/lib/workspace/catalog";
 import { WEEKDAYS } from "@/lib/workspace/calendar";
 import { ABOUT_MIN_CHARS, completionPercent, profileChecklist } from "@/lib/workspace/completion";
 import { resolveWorkspacePractitioner } from "@/lib/workspace/context";
@@ -56,16 +56,20 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
   const msg = readMessage(sp);
   const awaitingReview = status.versionState !== "draft" && status.versionState !== null;
 
-  const [specialties, languages, services, authorities, associations, photo] = await Promise.all([
+  const [specialties, languages, services, authorities, conditions, associations, photo] = await Promise.all([
     open.has("specialty") ? listSpecialtyOptions() : Promise.resolve([]),
     open.has("languages") ? listLanguageOptions() : Promise.resolve([]),
     open.has("services") ? listServiceOptions() : Promise.resolve([]),
     open.has("registration") ? listAuthorityOptions() : Promise.resolve([]),
+    open.has("specialty") ? listConditionOptions() : Promise.resolve([]),
     listAssociations(practitioner.id),
     photoState(practitioner.id),
   ]);
   const live = associations.filter((a) => a.state !== "ended" && a.state !== "rejected");
   const place = live[0] ? (live[0].kind === "service_area" ? `offering home visits in ${live[0].localityName}, ${live[0].cityName}` : `at ${live[0].clinicName}, ${live[0].localityName}, ${live[0].cityName}`) : "";
+  // Home-visit physiotherapists are not required to set hours (owner decision 7 Nov 2026), but without them
+  // their public calendar is empty, so the finish screen offers pre-filled hours they can change or skip.
+  const homeHours = !open.has("hours") && live.length > 0 && live.every((a) => a.kind === "service_area") && status.availabilityRuleCount === 0;
   const name = status.draft.identity?.displayName ?? practitioner.displayName;
   const degree = status.draft.qualifications?.[0]?.degree;
   const aboutStarter =
@@ -170,6 +174,28 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
               </fieldset>
             ) : null}
 
+            {open.has("specialty") && conditions.length ? (
+              <details className="rounded-[var(--r-ctl)] border border-line p-3">
+                <summary className="cursor-pointer text-sm font-medium">Conditions you treat <span className="font-normal text-muted">(optional: patients search by these)</span></summary>
+                <input type="hidden" name="conditionsShown" value="1" />
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  {[...new Set(conditions.map((c) => c.bodyArea))].map((area) => (
+                    <div key={area}>
+                      <p className="text-sm font-medium">{area}</p>
+                      <div className="mt-1 grid gap-1 text-sm">
+                        {conditions.filter((c) => c.bodyArea === area).map((c) => (
+                          <label key={c.id} className="flex items-center gap-1.5">
+                            <input type="checkbox" name="conditionIds" value={c.id} />
+                            {c.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+
             {open.has("services") ? (
               <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
                 <div>
@@ -186,10 +212,11 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
               </div>
             ) : null}
 
-            {open.has("hours") ? (
+            {open.has("hours") || homeHours ? (
               <fieldset>
-                <legend className="label">Clinic hours (patients book within these)</legend>
+                <legend className="label">{homeHours ? "When can you do home visits? (optional)" : "Clinic hours (patients book within these)"}</legend>
                 <input type="hidden" name="hoursShown" value="1" />
+                {homeHours ? <input type="hidden" name="hoursOptional" value="1" /> : null}
                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                   {[1, 2, 3, 4, 5, 6, 0].map((d) => (
                     <label key={d} className="flex items-center gap-1.5">
@@ -203,7 +230,7 @@ async function Finish({ searchParams }: { searchParams: PageProps<"/workspace/on
                   <span>to</span>
                   <input type="time" name="localEnd" className="input w-auto" defaultValue="19:00" required aria-label="Closes" />
                 </div>
-                <p className="mt-1 text-xs text-muted">Fine-tune per day, add breaks or leave later in Calendar.</p>
+                <p className="mt-1 text-xs text-muted">{homeHours ? "Your profile shows these as open times patients can request; you confirm each one. Untick every day to skip. " : ""}Fine-tune per day, add breaks or leave later in Calendar.</p>
               </fieldset>
             ) : null}
 

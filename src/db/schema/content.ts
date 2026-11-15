@@ -116,6 +116,11 @@ export const enquiries = pgTable(
     followUpOn: date("follow_up_on"),
     practitionerNote: text("practitioner_note"),
     outcome: text("outcome"), // booked | not_interested | no_response | other
+    // A time picked on the public calendar (CAL-10). A request only: nothing is reserved until the
+    // practitioner confirms it, which creates the booking recorded in booking_id.
+    requestedStartsAt: timestamp("requested_starts_at", { withTimezone: true }),
+    offeringId: uuid("offering_id"),
+    bookingId: uuid("booking_id"),
     ...timestamps,
   },
   (t) => [

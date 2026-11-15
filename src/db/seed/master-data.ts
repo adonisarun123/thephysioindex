@@ -1,5 +1,51 @@
 /** Controlled taxonomies and platform defaults (PRO-08, VER-01, VER-03, Section 2, Section 30). */
 
+/**
+ * Conditions treated, in the words patients search with. Ticked by the practitioner,
+ * seen by the reviewer at approval, shown on the profile. Order within an area is display order.
+ */
+export const CONDITIONS: { slug: string; label: string; bodyArea: string }[] = [
+  { slug: "low-back-pain", label: "Low back pain", bodyArea: "Back and neck" },
+  { slug: "sciatica", label: "Sciatica", bodyArea: "Back and neck" },
+  { slug: "slipped-disc", label: "Slipped disc", bodyArea: "Back and neck" },
+  { slug: "neck-pain", label: "Neck pain", bodyArea: "Back and neck" },
+  { slug: "cervical-spondylosis", label: "Cervical spondylosis", bodyArea: "Back and neck" },
+  { slug: "lumbar-spondylosis", label: "Lumbar spondylosis", bodyArea: "Back and neck" },
+  { slug: "posture-related-pain", label: "Posture-related pain", bodyArea: "Back and neck" },
+  { slug: "scoliosis", label: "Scoliosis", bodyArea: "Back and neck" },
+  { slug: "frozen-shoulder", label: "Frozen shoulder", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "rotator-cuff-injury", label: "Rotator cuff injury", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "shoulder-pain", label: "Shoulder pain", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "tennis-elbow", label: "Tennis elbow", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "carpal-tunnel-syndrome", label: "Carpal tunnel syndrome", bodyArea: "Shoulder, elbow and hand" },
+  { slug: "knee-pain", label: "Knee pain", bodyArea: "Hip, knee and foot" },
+  { slug: "knee-osteoarthritis", label: "Knee osteoarthritis", bodyArea: "Hip, knee and foot" },
+  { slug: "acl-and-ligament-injury", label: "ACL and ligament injury", bodyArea: "Hip, knee and foot" },
+  { slug: "meniscus-injury", label: "Meniscus injury", bodyArea: "Hip, knee and foot" },
+  { slug: "hip-pain", label: "Hip pain", bodyArea: "Hip, knee and foot" },
+  { slug: "ankle-sprain", label: "Ankle sprain", bodyArea: "Hip, knee and foot" },
+  { slug: "plantar-fasciitis", label: "Plantar fasciitis", bodyArea: "Hip, knee and foot" },
+  { slug: "heel-pain", label: "Heel pain", bodyArea: "Hip, knee and foot" },
+  { slug: "knee-replacement-rehabilitation", label: "Knee replacement rehabilitation", bodyArea: "After surgery or injury" },
+  { slug: "hip-replacement-rehabilitation", label: "Hip replacement rehabilitation", bodyArea: "After surgery or injury" },
+  { slug: "fracture-rehabilitation", label: "Fracture rehabilitation", bodyArea: "After surgery or injury" },
+  { slug: "sports-injury", label: "Sports injury", bodyArea: "After surgery or injury" },
+  { slug: "muscle-strain", label: "Muscle strain", bodyArea: "After surgery or injury" },
+  { slug: "stroke-rehabilitation", label: "Stroke rehabilitation", bodyArea: "Neurological" },
+  { slug: "parkinsons-disease", label: "Parkinson's disease", bodyArea: "Neurological" },
+  { slug: "bells-palsy", label: "Bell's palsy", bodyArea: "Neurological" },
+  { slug: "vertigo-and-bppv", label: "Vertigo and BPPV", bodyArea: "Neurological" },
+  { slug: "spinal-cord-injury", label: "Spinal cord injury", bodyArea: "Neurological" },
+  { slug: "cerebral-palsy", label: "Cerebral palsy", bodyArea: "Neurological" },
+  { slug: "developmental-delay-in-children", label: "Developmental delay in children", bodyArea: "Neurological" },
+  { slug: "arthritis", label: "Arthritis", bodyArea: "General" },
+  { slug: "balance-problems-and-falls", label: "Balance problems and falls", bodyArea: "General" },
+  { slug: "pregnancy-and-postnatal-back-pain", label: "Pregnancy and postnatal back pain", bodyArea: "General" },
+  { slug: "pelvic-floor-weakness", label: "Pelvic floor weakness", bodyArea: "General" },
+  { slug: "breathing-and-chest-physiotherapy", label: "Breathing and chest physiotherapy", bodyArea: "General" },
+  { slug: "headache-and-jaw-pain", label: "Headache and jaw pain", bodyArea: "General" },
+];
+
 export const SPECIALTIES: { code: string; label: string; requiresEvidence?: boolean; description?: string }[] = [
   { code: "ortho", label: "Orthopaedic physiotherapy", description: "Musculoskeletal conditions, joint and spine pain, post-fracture rehabilitation" },
   { code: "sports", label: "Sports physiotherapy", description: "Sports injury prevention, rehabilitation and return-to-play" },

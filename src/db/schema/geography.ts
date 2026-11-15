@@ -143,6 +143,25 @@ export const localityProposals = pgTable(
 );
 
 /** Controlled taxonomy of areas of practice (PRO-08). */
+/**
+ * Conditions a physiotherapist treats ("frozen shoulder", "sciatica"), in the
+ * words patients search with. Controlled vocabulary like specialties (PRO-08);
+ * a profile lists only conditions the practitioner ticked and a reviewer saw.
+ */
+export const conditions = pgTable(
+  "conditions",
+  {
+    id: id(),
+    slug: text("slug").notNull(),
+    label: text("label").notNull(),
+    bodyArea: text("body_area").notNull(),
+    active: boolean("active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("conditions_slug_uq").on(t.slug)],
+);
+
 export const specialties = pgTable(
   "specialties",
   {

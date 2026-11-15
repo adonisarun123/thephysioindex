@@ -1,4 +1,4 @@
-import type { AuthorityOption, Option } from "@/lib/workspace/catalog";
+import type { AuthorityOption, ConditionOption, Option } from "@/lib/workspace/catalog";
 import type { ProfileDraft } from "@/lib/workspace/draft";
 import type { CredentialRow } from "@/lib/workspace/queries";
 import { CredentialFields } from "@/components/workspace/forms/fields";
@@ -109,10 +109,12 @@ export function ExperienceSection({ items }: { items: NonNullable<ProfileDraft["
   );
 }
 
-export function ExpertiseSection({ draft, specialties, languages }: { draft: ProfileDraft; specialties: Option[]; languages: Option[] }) {
+export function ExpertiseSection({ draft, specialties, languages, conditions }: { draft: ProfileDraft; specialties: Option[]; languages: Option[]; conditions: ConditionOption[] }) {
   const chosen = new Set((draft.specialties ?? []).map((s) => s.specialtyId));
   const primary = draft.specialties?.find((s) => s.isPrimary)?.specialtyId ?? "";
   const langs = new Set(draft.languages ?? []);
+  const treats = new Set(draft.conditions ?? []);
+  const areas = [...new Set(conditions.map((c) => c.bodyArea))];
   return (
     <form action={saveExpertiseSection}>
       <Section id="expertise" title="Areas of practice and languages" lede="Controlled taxonomy; one primary area. Advanced areas may need supporting evidence at review (PRO-08).">
@@ -143,6 +145,27 @@ export function ExpertiseSection({ draft, specialties, languages }: { draft: Pro
             </ul>
           </div>
         </div>
+        {conditions.length ? (
+          <fieldset className="mt-6">
+            <legend className="label">Conditions you treat <span className="font-normal text-muted">(optional)</span></legend>
+            <p className="text-xs text-muted">Patients search by condition, for example &ldquo;frozen shoulder&rdquo;. Tick only what you treat regularly; our team sees this list when it reviews your profile.</p>
+            <div className="mt-2 grid gap-4 sm:grid-cols-2">
+              {areas.map((area) => (
+                <div key={area}>
+                  <p className="text-sm font-medium">{area}</p>
+                  <ul className="mt-1 grid gap-1 text-sm">
+                    {conditions.filter((c) => c.bodyArea === area).map((c) => (
+                      <li key={c.id} className="flex items-center gap-1.5">
+                        <input id={`cd-${c.id}`} type="checkbox" name="conditionIds" value={c.id} defaultChecked={treats.has(c.id)} />
+                        <label htmlFor={`cd-${c.id}`}>{c.label}</label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
         <Save />
       </Section>
     </form>

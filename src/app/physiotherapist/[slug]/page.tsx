@@ -332,6 +332,15 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
                   </li>
                 ))}
               </ul>
+              {p.conditions.length ? (
+                <div className="mt-5">
+                  <h3 className="text-sm font-semibold text-navy">Conditions treated</h3>
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {p.conditions.map((c) => <li key={c.slug} className="chip px-3 py-1.5 text-sm">{c.label}</li>)}
+                  </ul>
+                  <p className="mt-2 text-xs text-muted">Listed by {firstName}. This is not a statement about results for any patient.</p>
+                </div>
+              ) : null}
             </Section>
           ) : null}
 

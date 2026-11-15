@@ -10,6 +10,14 @@ export async function listSpecialtyOptions(): Promise<Option[]> {
   return res.rows.map((r) => ({ id: r.id, label: r.label, hint: r.description }));
 }
 
+export type ConditionOption = { id: string; label: string; bodyArea: string };
+
+/** Conditions a practitioner can tick as "conditions I treat", in display order. */
+export async function listConditionOptions(): Promise<ConditionOption[]> {
+  const res = await db().execute<{ id: string; label: string; body_area: string }>(sql`SELECT id, label, body_area FROM conditions WHERE active ORDER BY sort_order, label`);
+  return res.rows.map((r) => ({ id: r.id, label: r.label, bodyArea: r.body_area }));
+}
+
 export async function listLanguageOptions(): Promise<Option[]> {
   const res = await db().execute<{ id: string; label: string; native_label: string | null }>(sql`SELECT id, label, native_label FROM languages WHERE active ORDER BY sort_order, label`);
   return res.rows.map((r) => ({ id: r.id, label: r.label, hint: r.native_label }));

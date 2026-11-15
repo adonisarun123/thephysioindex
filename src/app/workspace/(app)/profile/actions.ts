@@ -74,8 +74,10 @@ export async function saveExpertiseSection(formData: FormData) {
     if (!specialties.some((s) => s.isPrimary)) throw new ApiError("INVALID_INPUT", "Choose one primary area of practice");
     await saveDraftSection(practitioner.id, viewer.userId, "specialties", specialties);
     await saveDraftSection(practitioner.id, viewer.userId, "languages", parseLanguages(formData));
+    // Conditions treated (optional): unticking everything clears the list.
+    await saveDraftSection(practitioner.id, viewer.userId, "conditions", [...new Set(formData.getAll("conditionIds").map(String))]);
     revalidatePath(PAGE);
-    done(PAGE, { ok: "Areas of practice and languages saved to your draft" });
+    done(PAGE, { ok: "Areas of practice, conditions and languages saved to your draft" });
   } catch (err) {
     failTo(back("expertise"), err);
   }
