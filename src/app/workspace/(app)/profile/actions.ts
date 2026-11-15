@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api";
 import { requireManage } from "@/lib/workspace/context";
+import { attachEvidence } from "@/lib/credential-evidence";
+import { MAX_EVIDENCE_BYTES } from "@/lib/credential-evidence-rules";
 import { addCredential, removeCredential } from "@/lib/workspace/credentials";
 import { IdentitySchema, saveDraftSection, submitDraft, validateForSubmission } from "@/lib/workspace/draft";
 import { done, failTo, opt, plainText, str } from "@/lib/workspace/forms";
@@ -99,6 +101,21 @@ export async function addCredentialAction(formData: FormData) {
     const { duplicateWarning } = await addCredential(practitioner.id, viewer.userId, parseCredentialForm(formData), { openReviewCase: practitioner.listingStatus === "published" });
     revalidatePath(PAGE);
     done(PAGE, duplicateWarning ? { error: "Saved, but this number already appears on another listing. A reviewer will check for duplicates (PRO-05)." } : { ok: "Credential added; it will show as self-declared until reviewed" });
+  } catch (err) {
+    failTo(back("credentials"), err);
+  }
+}
+
+/** VER-02: the practitioner's own certificate for a credential that has not been reviewed yet. */
+export async function uploadCredentialEvidenceAction(formData: FormData) {
+  try {
+    const { viewer, practitioner } = await requireManage();
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) throw new ApiError("INVALID_INPUT", "Choose a file to upload");
+    if (file.size > MAX_EVIDENCE_BYTES) throw new ApiError("INVALID_INPUT", "Files can be up to 4 MB. Take a smaller photo or compress the PDF.");
+    await attachEvidence({ practitionerId: practitioner.id, credentialId: str(formData, "credentialId"), actorUserId: viewer.userId, byStaff: false, bytes: Buffer.from(await file.arrayBuffer()) });
+    revalidatePath(PAGE);
+    done(PAGE, { ok: "Certificate uploaded. Only you and our verification team can open it." });
   } catch (err) {
     failTo(back("credentials"), err);
   }

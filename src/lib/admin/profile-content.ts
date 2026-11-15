@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
+import { slugify } from "@/lib/slug";
 
 /**
  * Shape of profile_versions.structured_content (PRO-08, PRO-10). The draft is
@@ -7,12 +8,20 @@ import type { Db } from "@/db/client";
  * tables that the public read models use. Missing keys leave the existing
  * relational rows untouched; present arrays replace them.
  */
+type Gender = "female" | "male" | "non_binary" | "unset";
+
 export type StructuredContent = {
+  /**
+   * The workspace draft nests the identity fields here
+   * (src/lib/workspace/draft.ts); imports and admin-created drafts use the
+   * top-level keys below. Approval reads both; the top-level key wins.
+   */
+  identity?: { displayName?: string; designation?: string; headline?: string; gender?: Gender };
   displayName?: string;
   designation?: string;
   headline?: string;
   about?: string;
-  gender?: "female" | "male" | "non_binary" | "unset";
+  gender?: Gender;
   practiceStartDate?: string; // YYYY-MM-DD
   qualifications?: { degree: string; institution: string; completionYear?: number | null; inProgress?: boolean }[];
   experiences?: { role: string; organisationName: string; startMonth: string; endMonth?: string | null; description?: string | null }[];
@@ -52,6 +61,17 @@ export const toCode = (x: string | { code?: string; id?: string; specialtyId?: s
  */
 export const monthToDate = (m: string) => (/^\d{4}-(0[1-9]|1[0-2])$/.test(m) ? `${m}-01` : m);
 
+/** Identity fields from either content shape. `undefined` means "not part of this change". */
+export function identityOf(c: StructuredContent): { displayName?: string; designation?: string; headline?: string; gender?: Gender } {
+  const i = c.identity ?? {};
+  return {
+    displayName: (c.displayName ?? i.displayName)?.trim() || undefined,
+    designation: c.designation ?? i.designation,
+    headline: c.headline ?? i.headline,
+    gender: c.gender ?? i.gender,
+  };
+}
+
 const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 /**
@@ -62,10 +82,23 @@ const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
 export async function applyStructuredContent(tx: Db, practitionerId: string, c: StructuredContent): Promise<string[]> {
   const applied: string[] = [];
   const sets: ReturnType<typeof sql>[] = [];
-  if (c.displayName !== undefined) sets.push(sql`display_name = ${c.displayName}`);
-  if (c.designation !== undefined) sets.push(sql`designation = ${c.designation}`);
-  if (c.headline !== undefined) sets.push(sql`headline = ${c.headline}`);
-  if (c.gender !== undefined) sets.push(sql`gender = ${c.gender}::gender_pref`);
+  const idn = identityOf(c);
+  if (idn.displayName !== undefined) {
+    sets.push(sql`display_name = ${idn.displayName}`);
+    // The profile address carries the name. When an approved name changes the
+    // slug follows it and the old one is kept in the history; links keep
+    // working because the page resolves by public id.
+    const cur = await tx.execute<{ slug: string }>(sql`SELECT slug FROM practitioners WHERE id = ${practitionerId}`);
+    const oldSlug = cur.rows[0]?.slug;
+    const slug = slugify(idn.displayName);
+    if (oldSlug && slug && slug !== oldSlug) {
+      await tx.execute(sql`INSERT INTO practitioner_slug_history (practitioner_id, slug) VALUES (${practitionerId}, ${oldSlug})`);
+      sets.push(sql`slug = ${slug}`);
+    }
+  }
+  if (idn.designation !== undefined) sets.push(sql`designation = ${idn.designation.trim() || null}`);
+  if (idn.headline !== undefined) sets.push(sql`headline = ${idn.headline.trim() || null}`);
+  if (idn.gender !== undefined) sets.push(sql`gender = ${idn.gender}::gender_pref`);
   if (c.practiceStartDate !== undefined) sets.push(sql`practice_start_date = ${c.practiceStartDate || null}::date`);
   if (sets.length) {
     await tx.execute(sql`UPDATE practitioners SET ${sql.join(sets, sql`, `)} WHERE id = ${practitionerId}`);

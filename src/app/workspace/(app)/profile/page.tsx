@@ -14,6 +14,7 @@ import { requireWorkspace } from "@/lib/workspace/context";
 import { getLatestVersion, validateForSubmission } from "@/lib/workspace/draft";
 import { readMessage } from "@/lib/workspace/forms";
 import { onboardingStatus } from "@/lib/workspace/onboarding";
+import { evidenceEnabled } from "@/lib/credential-evidence";
 import { listCredentials } from "@/lib/workspace/queries";
 import { submitForReview } from "./actions";
 
@@ -77,7 +78,7 @@ async function Editor({ searchParams }: { searchParams: PageProps<"/workspace/pr
       <ExperienceSection items={draft.experiences ?? []} />
       <ExpertiseSection draft={draft} specialties={specialties} languages={languages} />
       <PortfolioSection items={draft.portfolio ?? []} />
-      <CredentialsSection credentials={credentials} authorities={authorities} />
+      <CredentialsSection credentials={credentials} authorities={authorities} evidenceEnabled={evidenceEnabled()} />
 
       <Section id="submit" title={published ? "Submit changes for review" : "Submit for review"} lede={published ? "Identity, registration and degree changes trigger renewed review; the approved version remains visible meanwhile (VER-05)." : "Validates mandatory fields, requires current provider terms and opens a listing review (PRO-03)."}>
         {gaps.length ? (
