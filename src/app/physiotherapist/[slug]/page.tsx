@@ -12,7 +12,9 @@ import {
 import { SectionNav } from "@/components/profile/section-nav";
 import { ShareButton } from "@/components/profile/share-button";
 import { VerificationBadge } from "@/components/verification-badge";
-import { getPublicProfile, resolvePractitionerSlug, type PublicProfile } from "@/lib/directory";
+import { getPublicAvailability } from "@/lib/booking/public-availability";
+import { formatLocal } from "@/lib/booking/time";
+import { getPublicProfile, listColleagues, resolvePractitionerSlug, type PublicProfile } from "@/lib/directory";
 import { listPublishedByPractitioner } from "@/lib/content/public";
 import { formatPaise } from "@/lib/money";
 import { DEFAULT_OG_IMAGE, faqPageJsonLd, ldJson } from "@/lib/seo/jsonld";
@@ -66,6 +68,10 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
   const articles = p.listingStatus === "published" ? await listPublishedByPractitioner(p.id).catch(() => []) : [];
   // Approved gallery photos; a failed lookup must not take the profile down.
   const patientPhotos = p.listingStatus === "published" ? await listPublicPhotos(p.id).catch(() => []) : [];
+  // Public calendar and clinic colleagues; neither may take the profile down.
+  const [availability, colleagues] = p.listingStatus === "published"
+    ? await Promise.all([getPublicAvailability(p.id).catch(() => []), listColleagues(p.id).catch(() => [])])
+    : [[], []];
 
   if (p.listingStatus === "suspended") {
     return (
@@ -185,6 +191,8 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
       ["overview", "About", Boolean(p.about)],
       ["expertise", "Expertise", p.specialties.length > 0],
       ["clinics", p.branches.every((b) => b.kind === "service_area") && p.branches.length ? "Services & fees" : "Clinics & fees", true],
+      ["availability", "Availability", availability.length > 0],
+      ["team", "Clinic team", colleagues.length > 0],
       ["registrations", "Registrations", true],
       ["experience", "Experience", p.experiences.length > 0],
       ["education", "Education", p.qualifications.length > 0],
@@ -421,6 +429,73 @@ async function ProfilePage({ params }: { params: PageProps<"/physiotherapist/[sl
               </div>
             )}
           </Section>
+
+          {availability.length ? (
+            <Section id="availability" title="Availability this week" icon={<CalendarIcon />} note={`Times are in India Standard Time and are kept up to date by ${firstName}. Booked and blocked times are not shown.`}>
+              <div className="grid gap-6">
+                {availability.map((a) => {
+                  const open = a.days.some((d) => d.times.length);
+                  return (
+                    <div key={a.offeringId}>
+                      <p className="font-semibold text-navy">{a.placeLabel} <span className="font-normal text-muted">· {a.offeringName}, {a.durationMin} min</span></p>
+                      {open ? (
+                        <ul className="mt-3 grid gap-2">
+                          {a.days.map((d) => (
+                            <li key={d.date} className="grid gap-2 border-t border-line pt-2 sm:grid-cols-[7.5rem_1fr]">
+                              <span className="text-sm font-medium">{formatLocal(`${d.date}T12:00:00+05:30`, { weekday: "short", day: "numeric", month: "short" })}</span>
+                              {d.times.length ? (
+                                <span className="flex flex-wrap gap-2">
+                                  {d.times.slice(0, 8).map((t) => (
+                                    <Link
+                                      key={t.startsAt}
+                                      rel="nofollow"
+                                      href={a.instant ? `${p.path}/book?o=${a.offeringId}&d=${d.date}` : `${p.path}/enquire?o=${a.offeringId}&t=${encodeURIComponent(t.startsAt)}`}
+                                      className="chip px-3 py-1.5 text-sm hover:border-brand"
+                                    >
+                                      {formatLocal(t.startsAt, { hour: "numeric", minute: "2-digit" })}
+                                    </Link>
+                                  ))}
+                                  {d.times.length > 8 ? <span className="self-center text-sm text-muted">+{d.times.length - 8} more</span> : null}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-muted">No open times</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2 text-sm text-muted">No open times in the next 7 days. <Link href={`${p.path}/enquire`} className="underline">Send an enquiry</Link> to ask about later dates.</p>
+                      )}
+                      {open ? <p className="mt-3 text-sm text-muted">{a.instant ? "Pick a time to book it online." : `Pick a time to request it. ${firstName} confirms with you by phone; nothing is booked until then.`}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          ) : null}
+
+          {colleagues.map((g, i) => (
+            <Section key={g.clinicPath} id={i === 0 ? "team" : `team-${i + 1}`} title={`Also at ${g.clinicName}`} icon={<PinIcon />} aside={<Link href={g.clinicPath} className="text-sm underline">Clinic page</Link>}>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {g.members.map((m) => (
+                  <li key={m.publicId}>
+                    <Link href={m.path} className="flex items-center gap-3 rounded-[var(--r-panel)] border border-line p-3 hover:border-brand">
+                      {m.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- ImageKit already serves the sized image
+                        <img src={m.photoUrl} alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-full object-cover" loading="lazy" />
+                      ) : (
+                        <span aria-hidden className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-navy">{m.displayName.trim().charAt(0).toUpperCase()}</span>
+                      )}
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{m.displayName}</span>
+                        <span className="block truncate text-sm text-muted">{[m.primarySpecialty ?? m.designation, m.minFeePaise != null ? `from ${formatPaise(m.minFeePaise)}` : null].filter(Boolean).join(" · ")}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ))}
 
           {/* How it works: describes the platform flow that actually applies to this profile. */}
           <section aria-labelledby="how-h" className="profile-how overflow-hidden rounded-[var(--r-card)] p-5 text-white md:p-6">

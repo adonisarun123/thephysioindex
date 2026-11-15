@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api";
 import { getViewer } from "@/lib/auth/session";
 import { captureLead, LeadSchema } from "@/lib/practitioner-leads";
 import { ATTRIBUTION_KEYS } from "@/lib/practitioner-signups";
+import { suggestClinics, type ClinicSuggestion } from "@/lib/workspace/catalog";
 import { opt, str } from "@/lib/workspace/forms";
 import { RegistrationSchema, registerPractitioner } from "@/lib/workspace/registration";
 
@@ -43,6 +44,19 @@ export async function captureLeadAction(formData: FormData): Promise<LeadResult>
   }
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** "Is this your clinic?" on the registration form: published clinics with a similar name in the chosen city (LOC-02). */
+export async function suggestClinicsAction(name: string, cityId: string): Promise<ClinicSuggestion[]> {
+  try {
+    if (typeof name !== "string" || typeof cityId !== "string" || !UUID.test(cityId)) return [];
+    return await suggestClinics(name.slice(0, 160), cityId);
+  } catch (err) {
+    console.error("suggestClinicsAction failed", err);
+    return []; // a failed lookup must never block registration
+  }
+}
+
 const FIELD_LABELS: Record<string, string> = {
   fullName: "Full name", mobile: "Mobile", degree: "Qualification", institution: "College or university", authorityId: "Registered with",
   registrationNumber: "Registration number", practiceMode: "Where you see patients", clinicName: "Clinic name", addressLine1: "Clinic address",
@@ -76,6 +90,7 @@ export async function registerPhysio(formData: FormData): Promise<RegisterResult
       practiceMode: str(formData, "practiceMode"),
       clinicName: opt(formData, "clinicName"),
       addressLine1: opt(formData, "addressLine1"),
+      joinBranchId: opt(formData, "joinBranchId"),
       stateId: str(formData, "stateId"),
       cityId: str(formData, "cityId"),
       localityId: opt(formData, "localityId"),

@@ -538,9 +538,47 @@ export type PublicClinic = {
     publicPhone: string | null;
     workingHours: Record<string, { open: string; close: string }[]> | null;
     facilities: string[] | null;
-    practitioners: { publicId: string; slug: string; displayName: string; designation: string | null }[];
+    practitioners: ClinicTeamMember[];
   }[];
 };
+
+/** A published physiotherapist as shown on a clinic page or in a colleague list (LOC-02, PRO-09). */
+export type ClinicTeamMember = {
+  publicId: string;
+  slug: string;
+  path: string;
+  displayName: string;
+  designation: string | null;
+  photoUrl: string | null;
+  primarySpecialty: string | null;
+  /** Lowest published fee at this location, in paise; null when no service is published. */
+  minFeePaise: number | null;
+  bookable: boolean;
+};
+
+type TeamRow = { publicId: string; slug: string; displayName: string; designation: string | null; photoKey: string | null; primarySpecialty: string | null; minFeePaise: string | number | null; bookable: boolean };
+
+function teamMember(r: TeamRow): ClinicTeamMember {
+  return {
+    publicId: r.publicId,
+    slug: r.slug,
+    path: `/physiotherapist/${r.slug}-${r.publicId}`,
+    displayName: r.displayName,
+    designation: r.designation,
+    photoUrl: r.photoKey ? photoUrl(r.photoKey, 160) : null,
+    primarySpecialty: r.primarySpecialty,
+    minFeePaise: r.minFeePaise == null ? null : Number(r.minFeePaise),
+    bookable: Boolean(r.bookable),
+  };
+}
+
+/** JSON fields for one team member; expects aliases `p` (practitioners) and `pb` (practitioner_branches). */
+const TEAM_MEMBER_JSON = `json_build_object(
+  'publicId', p.public_id, 'slug', p.slug, 'displayName', p.display_name, 'designation', p.designation,
+  'photoKey', (SELECT m.object_key FROM media_assets m WHERE m.id = p.photo_asset_id AND m.moderation_state = 'approved' AND m.deleted_at IS NULL),
+  'primarySpecialty', (SELECT s.label FROM practitioner_specialties ps JOIN specialties s ON s.id = ps.specialty_id WHERE ps.practitioner_id = p.id ORDER BY ps.is_primary DESC, s.sort_order LIMIT 1),
+  'minFeePaise', (SELECT min(ov.base_price_paise) FROM offerings o JOIN offering_versions ov ON ov.id = o.current_version_id WHERE o.practitioner_branch_id = pb.id AND o.active),
+  'bookable', (p.booking_eligible AND NOT p.booking_paused AND pb.bookable))`;
 
 export async function getPublicClinic(publicId: string): Promise<PublicClinic | null> {
   const res = await db().execute<Record<string, unknown>>(sql`
@@ -550,7 +588,7 @@ export async function getPublicClinic(publicId: string): Promise<PublicClinic | 
           'localityName', l.name, 'cityName', ci.name, 'stateName', st.name, 'citySlug', ci.slug, 'stateSlug', st.slug, 'localitySlug', l.slug,
           'pinCode', b.pin_code, 'latitude', b.latitude, 'longitude', b.longitude, 'publicPhone', b.public_phone,
           'workingHours', b.working_hours, 'facilities', b.facilities,
-          'practitioners', (SELECT coalesce(json_agg(json_build_object('publicId', p.public_id, 'slug', p.slug, 'displayName', p.display_name, 'designation', p.designation) ORDER BY p.display_name), '[]'::json)
+          'practitioners', (SELECT coalesce(json_agg(${sql.raw(TEAM_MEMBER_JSON)} ORDER BY p.display_name), '[]'::json)
             FROM practitioner_branches pb JOIN practitioners p ON p.id = pb.practitioner_id
             WHERE pb.branch_id = b.id AND pb.state = 'approved' AND pb.active_to IS NULL AND p.listing_status = 'published' AND p.suspended_at IS NULL
               ${showTestAccounts() ? sql`` : sql`AND p.is_test_account = false`})
@@ -573,8 +611,36 @@ export async function getPublicClinic(publicId: string): Promise<PublicClinic | 
     about: (r.about as string | null) ?? null,
     website: (r.website as string | null) ?? null,
     publicPhone: (r.public_phone as string | null) ?? null,
-    branches: r.branches as PublicClinic["branches"],
+    branches: (r.branches as (Omit<PublicClinic["branches"][number], "practitioners"> & { practitioners: TeamRow[] })[]).map((b) => ({ ...b, practitioners: b.practitioners.map(teamMember) })),
   };
+}
+
+/**
+ * Other published physiotherapists at the same clinic location(s) as this one,
+ * for the "also at this clinic" block on a profile (LOC-02). Home-visit areas
+ * are personal records and never produce colleagues.
+ */
+export async function listColleagues(practitionerId: string): Promise<{ clinicName: string; clinicPath: string; members: ClinicTeamMember[] }[]> {
+  const res = await db().execute<{ clinic_name: string; clinic_path: string; members: TeamRow[] }>(sql`
+    SELECT c.name AS clinic_name, '/clinics/' || c.slug || '-' || c.public_id AS clinic_path,
+      (SELECT coalesce(json_agg(${sql.raw(TEAM_MEMBER_JSON)} ORDER BY p.display_name), '[]'::json)
+        FROM practitioner_branches pb JOIN practitioners p ON p.id = pb.practitioner_id
+        WHERE pb.branch_id = b.id AND pb.practitioner_id <> me.practitioner_id AND pb.state = 'approved' AND pb.active_to IS NULL
+          AND p.listing_status = 'published' AND p.suspended_at IS NULL
+          ${showTestAccounts() ? sql`` : sql`AND p.is_test_account = false`}) AS members
+    FROM practitioner_branches me
+    JOIN branches b ON b.id = me.branch_id AND b.status = 'published' AND b.kind = 'clinic'
+    JOIN clinics c ON c.id = b.clinic_id AND c.status = 'published'
+    WHERE me.practitioner_id = ${practitionerId} AND me.state = 'approved' AND me.active_to IS NULL
+    ORDER BY me.active_from`);
+  // One group per clinic: a physiotherapist at two branches of a clinic would otherwise list it twice.
+  const groups = new Map<string, { clinicName: string; clinicPath: string; members: ClinicTeamMember[] }>();
+  for (const r of res.rows) {
+    const g = groups.get(r.clinic_path) ?? { clinicName: r.clinic_name, clinicPath: r.clinic_path, members: [] };
+    for (const m of r.members.map(teamMember)) if (!g.members.some((x) => x.publicId === m.publicId)) g.members.push(m);
+    groups.set(r.clinic_path, g);
+  }
+  return [...groups.values()].filter((g) => g.members.length > 0);
 }
 
 // ---------------------------------------------------------------------------

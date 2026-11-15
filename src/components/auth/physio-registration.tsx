@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { captureLeadAction, registerPhysio } from "@/app/for-physiotherapists/join/actions";
+import { captureLeadAction, registerPhysio, suggestClinicsAction } from "@/app/for-physiotherapists/join/actions";
 import { PRACTICE_TYPES } from "@/lib/practitioner-signups";
 import { PlaceCascade } from "@/components/workspace/forms/place-cascade";
 import { authClient } from "@/lib/auth/client";
-import type { AuthorityOption, Option } from "@/lib/workspace/catalog";
+import type { AuthorityOption, ClinicSuggestion, Option } from "@/lib/workspace/catalog";
 import { DEGREES, PRACTICE_MODES } from "@/lib/workspace/registration-options";
 
 type Props = {
@@ -34,6 +34,28 @@ export function PhysioRegistration({ states, authorities, attribution, signedInE
   const [degree, setDegree] = useState<string>("");
   const clinic = PRACTICE_MODES.find((m) => m.value === mode)?.kind === "clinic";
   const homeVisits = mode === "home_visits";
+  // "Is this your clinic?" (LOC-02): colleagues from one clinic join one clinic page instead of creating copies.
+  const [suggestions, setSuggestions] = useState<ClinicSuggestion[]>([]);
+  const [joined, setJoined] = useState<ClinicSuggestion | null>(null);
+  const lookup = useRef("");
+
+  async function refreshSuggestions() {
+    const fd = form.current ? new FormData(form.current) : null;
+    const name = String(fd?.get("clinicName") ?? "").trim();
+    const cityId = String(fd?.get("cityId") ?? "");
+    const key = `${cityId}|${name.toLowerCase()}`;
+    if (!fd || name.length < 3 || !cityId) return setSuggestions([]);
+    if (key === lookup.current) return;
+    lookup.current = key;
+    const found = await suggestClinicsAction(name, cityId);
+    if (lookup.current === key) setSuggestions(found);
+  }
+
+  function joinClinic(c: ClinicSuggestion) {
+    setJoined(c);
+    const pin = form.current?.elements.namedItem("pinCode");
+    if (pin instanceof HTMLInputElement && !pin.value) pin.value = c.pinCode;
+  }
   // Quick lead step first for new visitors (owner decision 10 Nov 2026); signed-in practitioners go straight to the form.
   const [stage, setStage] = useState<"lead" | "full">(signedInEmail ? "full" : "lead");
   const [lead, setLead] = useState<{ reference: string; fullName: string; mobile: string } | null>(null);
@@ -107,7 +129,7 @@ export function PhysioRegistration({ states, authorities, attribution, signedInE
   async function create() {
     const res = await registerPhysio(new FormData(form.current!));
     if (res.redirectTo) {
-      window.location.href = res.redirectTo;
+      window.location.assign(res.redirectTo);
       return;
     }
     setBusy(false);
@@ -226,17 +248,46 @@ export function PhysioRegistration({ states, authorities, attribution, signedInE
         </div>
 
         {mode ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2" onChange={(e) => { if (clinic && !joined && e.target instanceof HTMLSelectElement) void refreshSuggestions(); }}>
             {clinic ? (
               <>
                 <div className="sm:col-span-2">
-                  <label className="label" htmlFor="clinicName">Clinic name</label>
-                  <input id="clinicName" name="clinicName" className="input" required minLength={2} maxLength={160} />
+                  <label className="label" htmlFor="clinicName">Clinic or hospital name</label>
+                  <input id="clinicName" name="clinicName" className="input" required minLength={2} maxLength={160} readOnly={Boolean(joined)} onBlur={() => { if (!joined) void refreshSuggestions(); }} />
+                  <p className="mt-1 text-xs text-muted">If a colleague has already listed it, we will offer it below once you choose the city.</p>
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="label" htmlFor="addressLine1">Clinic address</label>
-                  <input id="addressLine1" name="addressLine1" className="input" required minLength={3} maxLength={200} placeholder="Building, street" autoComplete="street-address" />
-                </div>
+                {joined ? (
+                  <div className="rounded-[var(--r-ctl)] border border-brand bg-brand-soft p-3 text-sm sm:col-span-2">
+                    <input type="hidden" name="joinBranchId" value={joined.branchId} />
+                    <p className="font-medium">You are joining {joined.clinicName}{joined.branchName !== joined.clinicName ? ` — ${joined.branchName}` : ""}</p>
+                    <p className="text-muted">{joined.address}, {joined.localityName} {joined.pinCode}. You keep your own profile, fees and calendar, and appear on the clinic&rsquo;s page with your colleagues.</p>
+                    <button type="button" className="mt-1 underline" onClick={() => setJoined(null)}>This is not my clinic</button>
+                  </div>
+                ) : (
+                  <>
+                    {suggestions.length ? (
+                      <div className="rounded-[var(--r-ctl)] border border-line bg-surface-2 p-3 text-sm sm:col-span-2" aria-live="polite">
+                        <p className="font-medium">Is this where you work?</p>
+                        <ul className="mt-2 grid gap-2">
+                          {suggestions.map((c) => (
+                            <li key={c.branchId} className="flex flex-wrap items-center justify-between gap-2">
+                              <span>
+                                <span className="font-medium">{c.clinicName}{c.branchName !== c.clinicName ? ` — ${c.branchName}` : ""}</span>
+                                <span className="block text-muted">{c.address}, {c.localityName} {c.pinCode}{c.physios ? ` · ${c.physios} physiotherapist${c.physios === 1 ? "" : "s"} listed` : ""}</span>
+                              </span>
+                              <button type="button" className="btn btn-secondary py-1.5 text-sm" onClick={() => joinClinic(c)}>Yes, I work here</button>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs text-muted">Not listed here? Carry on and we will add your clinic.</p>
+                      </div>
+                    ) : null}
+                    <div className="sm:col-span-2">
+                      <label className="label" htmlFor="addressLine1">Clinic address</label>
+                      <input id="addressLine1" name="addressLine1" className="input" required minLength={3} maxLength={200} placeholder="Building, street" autoComplete="street-address" />
+                    </div>
+                  </>
+                )}
               </>
             ) : null}
             <PlaceCascade states={states} cities={[]} localities={[]} selected={{}} reloadAction="/for-physiotherapists/join" idPrefix="reg-" />
